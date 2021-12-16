@@ -2,7 +2,6 @@ extern crate alloc;
 
 use alloc::collections::BTreeMap;
 use serde_derive::Deserialize;
-use serde_device_tree as dt;
 
 static DEVICE_TREE: &'static [u8] = include_bytes!("hifive-unmatched-a00.dtb");
 
@@ -44,13 +43,11 @@ enum MaybeCpu<'a> {
 #[derive(Debug, Deserialize)]
 struct Cpu<'a> {
     compatible: &'a str,
-    // #[serde(flatten, borrow)]
-    // others: BTreeMap<&'a str, &'a [u8]>,
 }
 
 fn main() {
     let ptr = DEVICE_TREE.as_ptr();
-    let t: Tree = unsafe { dt::from_raw(ptr) }.unwrap();
+    let t: Tree = unsafe { serde_device_tree::from_raw(ptr) }.unwrap();
     println!("#address_cells = {}", t.num_address_cells);
     println!("#size_cells = {}", t.num_size_cells);
     println!("model = {}", t.model);
