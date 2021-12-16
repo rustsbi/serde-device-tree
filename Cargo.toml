@@ -1,12 +1,28 @@
 [package]
-name = "serde_device_tree"
-version = "0.1.0"
+name = "serde-device-tree"
+version = "0.0.1"
+authors = [
+    "Luo Jia <me@luojia.cc>",
+]
+repository = "https://github.com/luojia65/serde-device-tree"
+documentation = "https://docs.rs/serde-device-tree"
+license = "MulanPSL-2.0"
+description = "A Device Tree blob serialization file format"
+readme = "README.md"
+keywords = ["serde", "serialization"]
+categories = ["no-std", "encoding"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0", default-features = false, features = ["alloc"] } # no std
+serde = { version = "1.0", default-features = false }
 
 [dev-dependencies]
 serde_derive = "1.0"
+
+[features]
+default = ["std"]
+
+std = ["serde/std"]
+alloc = ["serde/alloc"]

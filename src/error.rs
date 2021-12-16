@@ -1,3 +1,14 @@
+// Copyright (c) 2021 HUST IoT Security Lab
+// serde_device_tree is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//          http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+// EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+// MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
+#[cfg(feature = "alloc")]
 use alloc::{format, string::String};
 use core::fmt;
 
@@ -7,7 +18,10 @@ pub enum Error {
         error_type: ErrorType,
         file_index: usize,
     },
+    #[cfg(feature = "alloc")]
     Custom(String),
+    #[cfg(not(feature = "alloc"))]
+    Custom,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -238,12 +252,35 @@ impl serde::de::Error for Error {
     where
         T: fmt::Display,
     {
-        Self::Custom(format!("{}", msg))
+        #[cfg(feature = "alloc")]
+        {
+            Self::Custom(format!("{}", msg))
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            let _ = msg; // todo
+            Self::Custom
+        }
     }
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Error::Typed {
+                error_type: ErrorType::InvalidMagic { wrong_magic },
+                file_index,
+            } => write!(
+                f,
+                "Error(invalid magic, value: {}, index: {})",
+                wrong_magic, file_index
+            ),
+            // todo: format other error types
+            others => write!(f, "{:?}", others),
+        }
     }
 }

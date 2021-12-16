@@ -1,3 +1,13 @@
+// Copyright (c) 2021 HUST IoT Security Lab
+// serde_device_tree is licensed under Mulan PSL v2.
+// You can use this software according to the terms and conditions of the Mulan PSL v2.
+// You may obtain a copy of Mulan PSL v2 at:
+//          http://license.coscl.org.cn/MulanPSL2
+// THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+// EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+// MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+// See the Mulan PSL v2 for more details.
+
 use crate::error::{Error, Result};
 use core::iter::Peekable;
 use serde::de;
@@ -10,13 +20,14 @@ where
     let header = &*(ptr as *const Header);
     let magic = u32::from_be(header.magic);
     if magic != DEVICE_TREE_MAGIC {
-        let file_index = (&header.magic as *const _ as usize) - (&header as *const _ as usize);
+        let file_index =
+            (&header.magic as *const _ as usize) - (&header.magic as *const _ as usize);
         return Err(Error::invalid_magic(magic, file_index));
     }
     let last_comp_version = u32::from_be(header.last_comp_version);
     if last_comp_version > SUPPORTED_VERSION {
         let file_index =
-            (&header.last_comp_version as *const _ as usize) - (&header as *const _ as usize);
+            (&header.last_comp_version as *const _ as usize) - (&header.magic as *const _ as usize);
         return Err(Error::incompatible_version(
             last_comp_version,
             SUPPORTED_VERSION,
@@ -25,13 +36,14 @@ where
     }
     let total_size = u32::from_be(header.total_size);
     if total_size < HEADER_LEN {
-        let file_index = (&header.total_size as *const _ as usize) - (&header as *const _ as usize);
+        let file_index =
+            (&header.total_size as *const _ as usize) - (&header.magic as *const _ as usize);
         return Err(Error::header_too_short(total_size, HEADER_LEN, file_index));
     }
     let off_dt_struct = u32::from_be(header.off_dt_struct);
     if off_dt_struct < HEADER_LEN {
         let file_index =
-            (&header.off_dt_struct as *const _ as usize) - (&header as *const _ as usize);
+            (&header.off_dt_struct as *const _ as usize) - (&header.magic as *const _ as usize);
         return Err(Error::structure_index_underflow(
             off_dt_struct,
             HEADER_LEN,
@@ -41,7 +53,7 @@ where
     let size_dt_struct = u32::from_be(header.size_dt_struct);
     if off_dt_struct + size_dt_struct > total_size {
         let file_index =
-            (&header.size_dt_struct as *const _ as usize) - (&header as *const _ as usize);
+            (&header.size_dt_struct as *const _ as usize) - (&header.magic as *const _ as usize);
         return Err(Error::structure_index_overflow(
             off_dt_struct + size_dt_struct,
             HEADER_LEN,
@@ -51,7 +63,7 @@ where
     let off_dt_strings = u32::from_be(header.off_dt_strings);
     if off_dt_strings < HEADER_LEN {
         let file_index =
-            (&header.off_dt_strings as *const _ as usize) - (&header as *const _ as usize);
+            (&header.off_dt_strings as *const _ as usize) - (&header.magic as *const _ as usize);
         return Err(Error::string_index_underflow(
             off_dt_strings,
             HEADER_LEN,
@@ -61,7 +73,7 @@ where
     let size_dt_strings = u32::from_be(header.size_dt_strings);
     if off_dt_struct + size_dt_strings > total_size {
         let file_index =
-            (&header.size_dt_strings as *const _ as usize) - (&header as *const _ as usize);
+            (&header.size_dt_strings as *const _ as usize) - (&header.magic as *const _ as usize);
         return Err(Error::string_index_overflow(
             off_dt_strings,
             HEADER_LEN,
@@ -393,15 +405,10 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer<'de> {
     {
         match self.peek_tag_index()? {
             Some((Tag::Prop(value_slice, _name_slice), file_index)) => {
-                if value_slice.len() != 4 {
-                    return Err(Error::invalid_serde_type_length(4, *file_index));
-                }
-                let value = u32::from_be_bytes([
-                    value_slice[0],
-                    value_slice[1],
-                    value_slice[2],
-                    value_slice[3],
-                ]);
+                let value = match value_slice {
+                    [a, b, c, d] => u32::from_be_bytes([*a, *b, *c, *d]),
+                    _ => return Err(Error::invalid_serde_type_length(4, *file_index)),
+                };
                 self.eat_tag()?;
                 visitor.visit_u32(value)
             }
@@ -671,5 +678,32 @@ impl<'de, 'b> de::MapAccess<'de> for MapVisitor<'de, 'b> {
             Some(Tag::End) => panic!(),
             None => return Err(Error::no_remaining_tags()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(feature = "alloc")]
+    use alloc::format;
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    use serde_derive::Deserialize;
+    #[cfg(feature = "std")]
+    use std::format;
+
+    #[cfg(any(feature = "std", feature = "alloc"))]
+    #[test]
+    fn error_invalid_magic() {
+        static DEVICE_TREE: &'static [u8] = &[0x11, 0x22, 0x33, 0x44]; // not device tree blob format
+        let ptr = DEVICE_TREE.as_ptr();
+
+        #[derive(Debug, Deserialize)]
+        struct Tree {}
+
+        let ans: Result<Tree, _> = unsafe { super::from_raw(ptr) };
+        let err = ans.unwrap_err();
+        assert_eq!(
+            "Error(invalid magic, value: 287454020, index: 0)",
+            format!("{}", err)
+        );
     }
 }
