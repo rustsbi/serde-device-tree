@@ -8,10 +8,45 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! Deserialize device tree data to a Rust data structure.
+
 use crate::error::{Error, Result};
 use core::iter::Peekable;
 use serde::de;
 
+/// Deserialize an instance of type `T` from raw pointer of device tree blob.
+///
+/// This function is useful in developing device tree compatible firmware
+/// or operating system kernels to parse structure from previous bootloading
+/// stage.
+///
+/// # Example
+///
+/// ```
+/// # static DEVICE_TREE: &'static [u8] = include_bytes!("../examples/hifive-unmatched-a00.dtb");
+/// # let dtb_pa = DEVICE_TREE.as_ptr() as usize;
+/// use serde_derive::Deserialize;
+///
+/// #[derive(Debug, Deserialize)]
+/// struct Tree<'a> {
+///     #[serde(borrow)]
+///     chosen: Option<Chosen<'a>>,
+/// }
+///
+/// #[derive(Debug, Deserialize)]
+/// #[serde(rename_all = "kebab-case")]
+/// struct Chosen<'a> {
+///     stdout_path: Option<&'a str>,
+/// }
+///
+/// let tree: Tree = unsafe { serde_device_tree::from_raw(dtb_pa as *const u8) }
+///     .expect("parse device tree");
+/// if let Some(chosen) = tree.chosen {
+///     if let Some(stdout_path) = chosen.stdout_path {
+///         println!("stdout path: {}", stdout_path);
+///     }
+/// }
+/// ```
 pub unsafe fn from_raw<'de, T>(ptr: *const u8) -> Result<T>
 where
     T: de::Deserialize<'de>,

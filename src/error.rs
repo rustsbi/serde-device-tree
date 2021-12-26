@@ -8,10 +8,13 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
+//! When serializing or deserializing device tree goes wrong.
+
 #[cfg(feature = "alloc")]
 use alloc::{format, string::String};
 use core::fmt;
 
+/// Represents all possible errors that can occur when serializing or deserializing device tree data.
 #[derive(Clone, Debug)]
 pub enum Error {
     Typed {
@@ -24,6 +27,7 @@ pub enum Error {
     Custom,
 }
 
+/// All error types that would occur from device tree serializing and deserializing.
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorType {
     InvalidMagic {
@@ -245,6 +249,7 @@ impl Error {
     }
 }
 
+/// Alias for a Result with the error type `serde_device_tree:::Error`.
 pub type Result<T> = core::result::Result<T, Error>;
 
 impl serde::de::Error for Error {
