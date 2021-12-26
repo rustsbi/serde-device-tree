@@ -1,2 +1,5 @@
 /target
 Cargo.lock
+
+# Visual Studio Code configuration files
+.vscode/
