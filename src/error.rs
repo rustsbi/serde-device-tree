@@ -47,6 +47,9 @@ pub enum ErrorType {
         structure_or_string: bool,
         overflow_or_underflow: bool,
     },
+    U32IndexSpace {
+        current_index: u32,
+    },
     StringEofUnexpected,
     SliceEofUnexpected {
         expected_length: u32,
@@ -100,6 +103,18 @@ impl Error {
             error_type: ErrorType::HeaderTooShort {
                 header_length,
                 at_least_length,
+            },
+            file_index,
+        }
+    }
+    #[inline]
+    pub fn u32_index_space_overflow(
+        current_index: u32,
+        file_index: usize,
+    ) -> Error {
+        Error::Typed {
+            error_type: ErrorType::U32IndexSpace {
+                current_index
             },
             file_index,
         }

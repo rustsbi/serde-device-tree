@@ -193,7 +193,10 @@ impl<'a> Tags<'a> {
         self.cur + self.offset_from_file_begin
     }
     #[inline]
-    fn read_cur_u32(&mut self) -> u32 {
+    fn read_cur_u32(&mut self) -> Result<u32> {
+        if self.cur >= (u32::MAX - 4) as usize {
+            return Err(Error::u32_index_space_overflow(self.cur as u32, self.file_index()))
+        }
         let ans = u32::from_be_bytes([
             self.structure[self.cur],
             self.structure[self.cur + 1],
@@ -201,7 +204,7 @@ impl<'a> Tags<'a> {
             self.structure[self.cur + 3],
         ]);
         self.cur += 4;
-        ans
+        Ok(ans)
     }
     #[inline]
     fn read_string0_align(&mut self) -> Result<&'a [u8]> {
@@ -269,17 +272,22 @@ impl<'a> Iterator for Tags<'a> {
         }
         let ans = loop {
             match self.read_cur_u32() {
-                FDT_BEGIN_NODE => match self.read_string0_align() {
+                Ok(FDT_BEGIN_NODE) => match self.read_string0_align() {
                     Ok(name) => {
-                        // println!("cur = {}", self.cur)
+                        // begin of structure tag
                         break Some(Ok(Tag::Begin(name)));
                     }
                     Err(e) => break Some(Err(e)),
                 },
-                FDT_PROP => {
-                    let val_size = self.read_cur_u32();
-                    let name_offset = self.read_cur_u32();
-                    // println!("size {}, off {}", val_size, name_offset);
+                Ok(FDT_PROP) => {
+                    let val_size = match self.read_cur_u32() {
+                        Ok(v) => v,
+                        Err(e) => break Some(Err(e)),
+                    };
+                    let name_offset = match self.read_cur_u32() {
+                        Ok(v) => v,
+                        Err(e) => break Some(Err(e)),
+                    };
                     // get value slice
                     let val = match self.read_slice_align(val_size) {
                         Ok(slice) => slice,
@@ -293,10 +301,11 @@ impl<'a> Iterator for Tags<'a> {
                     };
                     break Some(Ok(Tag::Prop(val, prop_name)));
                 }
-                FDT_END_NODE => break Some(Ok(Tag::End)),
-                FDT_NOP => self.cur += 4,
-                FDT_END => break None,
-                invalid => break Some(Err(Error::invalid_tag_id(invalid, self.file_index()))),
+                Ok(FDT_END_NODE) => break Some(Ok(Tag::End)),
+                Ok(FDT_NOP) => self.cur += 4,
+                Ok(FDT_END) => break None,
+                Ok(invalid) => break Some(Err(Error::invalid_tag_id(invalid, self.file_index()))),
+                Err(e) => break Some(Err(e))
             }
         };
         match ans {
