@@ -11,11 +11,13 @@ use serde::{
 mod device_tree;
 mod node_seq;
 mod str_seq;
+mod structure_block;
 
 pub use node_seq::NodeSeq;
 pub use str_seq::StrSeq;
 
 use device_tree::DeviceTree;
+use structure_block::StructureBlock;
 
 const U32_LEN: usize = core::mem::size_of::<u32>();
 const OF_DT_END_STR: u8 = 0;
@@ -38,23 +40,15 @@ where
         loaded: Tag::End,
         device_tree: DeviceTree::from_raw_ptr(ptr)?,
     };
-    T::deserialize(&mut d)
+    let res = T::deserialize(&mut d)?;
+    assert!(d.device_tree.end());
+    Ok(res)
 }
 
 struct Deserializer {
     expect_strings: bool,
     loaded: Tag,
     device_tree: DeviceTree,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[repr(transparent)]
-struct StructureBlock([u8; U32_LEN]);
-
-impl From<u32> for StructureBlock {
-    fn from(val: u32) -> Self {
-        Self(u32::to_ne_bytes(val))
-    }
 }
 
 #[derive(Debug)]
@@ -129,11 +123,8 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer {
         V: de::Visitor<'de>,
     {
         match self.loaded {
-            Tag::Prop(_, bytes) => match *bytes {
-                [a, b, c, d] => visitor.visit_u32(u32::from_be_bytes([a, b, c, d])),
-                _ => todo!(),
-            },
-            Tag::Begin(_) | Tag::MultipleBlock(_, _) | Tag::End => todo!(),
+            Tag::Prop(_, &[a, b, c, d]) => visitor.visit_u32(u32::from_be_bytes([a, b, c, d])),
+            _ => todo!(),
         }
     }
 

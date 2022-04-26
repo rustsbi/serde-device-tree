@@ -55,10 +55,7 @@ impl<T> NodeSeq<T> {
 
     pub fn exist(&self) -> bool {
         let next = StructureBlock::from(unsafe { *self.next });
-        match next.0 {
-            OF_DT_BEGIN_NODE | OF_DT_END_NODE => false,
-            _ => true,
-        }
+        !matches!(next.0, OF_DT_BEGIN_NODE | OF_DT_END_NODE)
     }
 
     pub fn next(&mut self) {

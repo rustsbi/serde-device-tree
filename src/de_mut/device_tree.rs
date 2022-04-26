@@ -1,14 +1,19 @@
 ﻿use super::*;
 use crate::{common::Header, Error};
 
+/// 设备树。
 #[derive(Debug)]
 pub(super) struct DeviceTree {
+    /// 光标，指示当前解析位置。
     pub cursor: usize,
+    /// 设备树的结构块。
     pub structure: &'static mut [StructureBlock],
+    /// 设备树的字符串块。
     pub strings: &'static [u8],
 }
 
 impl DeviceTree {
+    /// 从指针构造设备树。
     pub unsafe fn from_raw_ptr(ptr: *mut u8) -> Result<Self, Error> {
         let header = &*(ptr as *const Header);
         header.verify()?;
@@ -25,12 +30,15 @@ impl DeviceTree {
 
         Ok(Self {
             cursor: 0,
-            structure: core::slice::from_raw_parts_mut(ptr_dt_struct.add(2), size_dt_struct - 2),
+            structure: core::slice::from_raw_parts_mut(ptr_dt_struct.add(2), size_dt_struct - 3),
             strings: core::slice::from_raw_parts(ptr_dt_strings, size_dt_strings),
         })
     }
 
-    pub(super) fn from_parts(structure: &[u8], strings: &[u8]) -> Self {
+    /// 从内存块构造设备树。
+    ///
+    /// 可以使用结构块的一部分构造子设备树。
+    pub fn from_parts(structure: &[u8], strings: &[u8]) -> Self {
         let ptr_dt_struct = structure.as_ptr() as *mut _;
         let size_dt_struct = structure.len() / U32_LEN;
 
@@ -46,6 +54,7 @@ impl DeviceTree {
 }
 
 impl DeviceTree {
+    /// 解析作为节点名的 '\0' 结尾字符串。
     fn next_cstr(&mut self) -> Result<&'static str, Error> {
         let begin = self.cursor;
         self.structure[begin..]
@@ -70,6 +79,7 @@ impl DeviceTree {
             .ok_or_else(|| Error::string_eof_unpexpected(begin * U32_LEN))
     }
 
+    /// 解析属性条目。
     fn next_prop(&mut self) -> Result<(&'static str, &'static [u8]), Error> {
         match self.structure[self.cursor..] {
             [data_len, name_off, ..] => {
@@ -98,19 +108,27 @@ impl DeviceTree {
         }
     }
 
+    /// 解析一组同级同类节点。
     fn next_multiple(&mut self, name: &str, begin: usize) -> Result<&'static mut [u8], Error> {
+        let name_bytes = name.as_bytes();
+        let name_blocks = (name_bytes.len() + U32_LEN - 1) / U32_LEN;
         self.skip_node()?;
         while let [StructureBlock(block), ..] = self.structure[self.cursor..] {
             match block {
                 OF_DT_BEGIN_NODE => {
-                    let mark = self.cursor;
-                    self.cursor += 1;
-                    match self.next_cstr()?.split_once('@') {
-                        Some((name_, _)) if name_ == name => self.skip_node()?,
-                        _ => {
-                            self.cursor = mark;
-                            break;
+                    let name_bytes_ = unsafe {
+                        core::slice::from_raw_parts(
+                            self.structure[self.cursor + 1..].as_ptr() as *const u8,
+                            name_bytes.len() + 1,
+                        )
+                    };
+                    match name_bytes_ {
+                        [name @ .., at] if name == name_bytes && *at == b'@' => {
+                            self.cursor += 1 + name_blocks;
+                            self.skip_cstr()?;
+                            self.skip_node()?;
                         }
+                        _ => break,
                     }
                 }
                 OF_DT_END_NODE | OF_DT_PROP => break,
@@ -126,10 +144,12 @@ impl DeviceTree {
         })
     }
 
+    /// 设备树全部解析完成。
     pub fn end(&self) -> bool {
         self.cursor >= self.structure.len()
     }
 
+    /// 解析出下一个反序列化单元。
     pub fn next(&mut self) -> Result<Tag, Error> {
         let begin = self.cursor;
         self.structure[begin..]
@@ -170,7 +190,7 @@ impl DeviceTree {
             })
     }
 
-    /// 从 BEGIN 标签后跳过一个 '\0' 结尾字符串
+    /// 从 BEGIN 标签后跳过一个 '\0' 结尾字符串。
     pub fn skip_cstr(&mut self) -> Result<(), Error> {
         while let Some(StructureBlock(block)) = self.structure.get(self.cursor) {
             self.cursor += 1;
@@ -181,7 +201,7 @@ impl DeviceTree {
         Ok(())
     }
 
-    /// 从节点名后跳过节点内部结构
+    /// 从节点名后跳过节点内部结构。
     pub fn skip_node(&mut self) -> Result<(), Error> {
         let mut level = 1;
         'outer: while let Some(StructureBlock(block)) = self.structure.get(self.cursor) {
