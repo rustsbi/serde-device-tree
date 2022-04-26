@@ -19,8 +19,13 @@ extern crate alloc;
 pub mod de;
 pub mod error;
 
+mod common;
+mod de_mut;
+
 #[doc(inline)]
 pub use de::from_raw;
+
+pub use de_mut::{from_raw_mut, NodeSeq, StrSeq};
 
 #[doc(inline)]
 pub use error::{Error, Result};

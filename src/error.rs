@@ -108,14 +108,9 @@ impl Error {
         }
     }
     #[inline]
-    pub fn u32_index_space_overflow(
-        current_index: u32,
-        file_index: usize,
-    ) -> Error {
+    pub fn u32_index_space_overflow(current_index: u32, file_index: usize) -> Error {
         Error::Typed {
-            error_type: ErrorType::U32IndexSpace {
-                current_index
-            },
+            error_type: ErrorType::U32IndexSpace { current_index },
             file_index,
         }
     }
@@ -175,6 +170,22 @@ impl Error {
                 bound_index: at_most_index,
                 structure_or_string: false,
                 overflow_or_underflow: true,
+            },
+            file_index,
+        }
+    }
+    #[inline]
+    pub fn mem_rsvmap_index_underflow(
+        begin_index: u32,
+        at_least_index: u32,
+        file_index: usize,
+    ) -> Error {
+        Error::Typed {
+            error_type: ErrorType::StructureIndex {
+                current_index: begin_index,
+                bound_index: at_least_index,
+                structure_or_string: false,
+                overflow_or_underflow: false,
             },
             file_index,
         }
