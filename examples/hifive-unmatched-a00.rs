@@ -1,53 +1,53 @@
 extern crate alloc;
 
 use serde_derive::Deserialize;
-use serde_device_tree::{from_raw_mut, NodeSeq, StrSeq};
+use serde_device_tree::{from_raw_mut, Dtb, DtbPtr, NodeSeq, StrSeq};
 
 static DEVICE_TREE: &[u8] = include_bytes!("hifive-unmatched-a00.dtb");
 
 #[derive(Debug, Deserialize)]
-struct Tree {
+struct Tree<'a> {
     #[serde(rename = "#address-cells")]
     num_address_cells: u32,
     #[serde(rename = "#size-cells")]
     num_size_cells: u32,
-    model: &'static str,
-    compatible: StrSeq,
-    #[serde(default)]
-    chosen: Option<Chosen>,
-    cpus: Cpus,
-    memory: NodeSeq<Memory>,
+    model: &'a str,
+    compatible: StrSeq<'a>,
+    chosen: Option<Chosen<'a>>,
+    cpus: Cpus<'a>,
+    memory: NodeSeq<'a, Memory<'a>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct Chosen {
-    stdout_path: Option<&'static str>,
+struct Chosen<'a> {
+    stdout_path: Option<&'a str>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-struct Cpus {
+struct Cpus<'a> {
     timebase_frequency: u32,
     #[serde(rename = "u-boot,dm-spl", default)]
     u_boot_dm_spl: bool,
-    cpu: NodeSeq<Cpu>,
+    cpu: NodeSeq<'a, Cpu<'a>>,
 }
 
 #[derive(Debug, Deserialize)]
-struct Cpu {
-    compatible: StrSeq,
+struct Cpu<'a> {
+    compatible: StrSeq<'a>,
 }
 
 #[derive(Debug, Deserialize)]
-struct Memory {
-    device_type: &'static str,
+struct Memory<'a> {
+    device_type: &'a str,
 }
 
 fn main() {
-    // let ptr = DEVICE_TREE.as_ptr();
     let mut slice = DEVICE_TREE.to_vec();
-    let mut t: Tree = unsafe { from_raw_mut(slice.as_mut_ptr()) }.unwrap();
+    let ptr = DtbPtr::from_raw(slice.as_mut_ptr()).unwrap();
+    let dtb = Dtb::from(ptr).share();
+    let mut t: Tree = from_raw_mut(&dtb).unwrap();
     println!("#address_cells = {}", t.num_address_cells);
     println!("#size_cells = {}", t.num_size_cells);
     println!("model = {}", t.model);
@@ -62,18 +62,19 @@ fn main() {
     println!("cpu timebase frequency = {}", t.cpus.timebase_frequency);
     println!("cpu u_boot_dm_spl = {}", t.cpus.u_boot_dm_spl);
 
-    while t.cpus.cpu.exist() {
+    for cpu in t.cpus.cpu.iter() {
         println!(
-            "cpn@{}, compatible = {:?}",
-            t.cpus.cpu.at(),
-            t.cpus.cpu.deserialize().unwrap().compatible
+            "cpu@{}: compatible = {:?}",
+            cpu.at(),
+            cpu.deserialize().compatible
         );
-        t.cpus.cpu.next();
     }
 
-    println!("memory@{}", t.memory.at());
-    println!(
-        "memory device_type = {}",
-        t.memory.deserialize().unwrap().device_type
-    );
+    for mem in t.memory.iter() {
+        println!(
+            "memory@{}: device_type = {}",
+            mem.at(),
+            mem.deserialize().device_type
+        );
+    }
 }

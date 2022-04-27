@@ -14,6 +14,8 @@
 use alloc::{format, string::String};
 use core::fmt;
 
+use crate::common::ALIGN;
+
 /// Represents all possible errors that can occur when serializing or deserializing device tree data.
 #[derive(Clone, Debug)]
 pub enum Error {
@@ -30,6 +32,10 @@ pub enum Error {
 /// All error types that would occur from device tree serializing and deserializing.
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorType {
+    Unaligned {
+        ptr_value: usize,
+        align: usize,
+    },
     InvalidMagic {
         wrong_magic: u32,
     },
@@ -77,14 +83,24 @@ pub enum ErrorType {
 
 impl Error {
     #[inline]
-    pub fn invalid_magic(wrong_magic: u32, file_index: usize) -> Error {
+    pub const fn unaligned(ptr_value: usize) -> Error {
         Error::Typed {
-            error_type: ErrorType::InvalidMagic { wrong_magic },
-            file_index,
+            error_type: ErrorType::Unaligned {
+                ptr_value,
+                align: ALIGN,
+            },
+            file_index: 0,
         }
     }
     #[inline]
-    pub fn incompatible_version(
+    pub const fn invalid_magic(wrong_magic: u32) -> Error {
+        Error::Typed {
+            error_type: ErrorType::InvalidMagic { wrong_magic },
+            file_index: 0,
+        }
+    }
+    #[inline]
+    pub const fn incompatible_version(
         last_comp_version: u32,
         library_supported_version: u32,
         file_index: usize,
@@ -290,7 +306,7 @@ impl serde::de::Error for Error {
 
         #[cfg(not(feature = "alloc"))]
         {
-            let _ = msg; // todo
+            panic!("{}", msg);
             Self::Custom
         }
     }

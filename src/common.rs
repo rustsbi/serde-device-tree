@@ -18,6 +18,7 @@ pub(crate) struct Header {
 const DEVICE_TREE_MAGIC: u32 = 0xD00DFEED;
 const U32_LEN: u32 = core::mem::size_of::<u32>() as _;
 
+pub(crate) const ALIGN: usize = core::mem::align_of::<usize>();
 pub(crate) const HEADER_LEN: u32 = core::mem::size_of::<Header>() as _;
 pub(crate) const FDT_BEGIN_NODE: u32 = 0x1;
 pub(crate) const FDT_END_NODE: u32 = 0x2;
@@ -32,8 +33,7 @@ impl Header {
         // ---
         let magic = u32::from_be(self.magic);
         if magic != DEVICE_TREE_MAGIC {
-            let file_index = (&self.magic as *const _ as usize) - header_base;
-            return Err(Error::invalid_magic(magic, file_index));
+            return Err(Error::invalid_magic(magic));
         }
         // ---
         let last_comp_version = u32::from_be(self.last_comp_version);
