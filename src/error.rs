@@ -295,18 +295,17 @@ impl Error {
 pub type Result<T> = core::result::Result<T, Error>;
 
 impl serde::de::Error for Error {
-    fn custom<T>(msg: T) -> Self
+    fn custom<T>(_msg: T) -> Self
     where
         T: fmt::Display,
     {
         #[cfg(feature = "alloc")]
         {
-            Self::Custom(format!("{}", msg))
+            Self::Custom(format!("{}", _msg))
         }
 
         #[cfg(not(feature = "alloc"))]
         {
-            panic!("{}", msg);
             Self::Custom
         }
     }

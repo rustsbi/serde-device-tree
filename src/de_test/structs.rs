@@ -64,6 +64,7 @@ impl StructureBlock {
     /// 块占位符。
     pub const NOP: Self = Self(4u32.to_be());
     /// 结构区终止符。
+    #[allow(unused)]
     pub const END: Self = Self(9u32.to_be());
 
     /// 一个 '\0' 结尾字符串结束于此块。

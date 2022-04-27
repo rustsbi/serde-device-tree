@@ -47,7 +47,7 @@ fn main() {
     let mut slice = DEVICE_TREE.to_vec();
     let ptr = DtbPtr::from_raw(slice.as_mut_ptr()).unwrap();
     let dtb = Dtb::from(ptr).share();
-    let mut t: Tree = from_raw_mut(&dtb).unwrap();
+    let t: Tree = from_raw_mut(&dtb).unwrap();
     println!("#address_cells = {}", t.num_address_cells);
     println!("#size_cells = {}", t.num_size_cells);
     println!("model = {}", t.model);

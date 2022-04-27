@@ -1,6 +1,7 @@
 ﻿use super::{DtError, GroupCursor, RefDtb};
 use serde::de;
 
+#[allow(unused)]
 pub(super) struct GroupDeserializer<'de> {
     pub dtb: RefDtb<'de>,
     pub cursor: GroupCursor,

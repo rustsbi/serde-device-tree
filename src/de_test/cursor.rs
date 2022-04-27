@@ -26,10 +26,6 @@ impl Type for Group {}
 impl Type for Prop {}
 
 impl<T: Type> AnyCursor<T> {
-    pub fn as_body(&self) -> AnyCursor {
-        AnyCursor(self.0, PhantomData)
-    }
-
     /// 移动 `n` 格。
     pub fn step_n(&mut self, len: usize) {
         self.0 += len;
@@ -197,7 +193,7 @@ impl GroupCursor {
     }
 
     /// 组结构恢复原状。
-    pub fn drop_on(&self, dtb: RefDtb) {
+    pub fn drop_on(&self, _dtb: RefDtb) {
         // todo!()
     }
 }
