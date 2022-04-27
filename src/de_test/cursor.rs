@@ -75,9 +75,9 @@ impl BodyCursor {
             match structure[self.0] {
                 // 下陷一级
                 B::NODE_BEGIN => {
-                    level += 1;
                     self.0 += 1;
                     self.skip_str_on(dtb);
+                    level += 1;
                 }
                 // 上浮一级
                 B::NODE_END => {
@@ -157,10 +157,12 @@ impl TitleCursor {
 }
 
 impl GroupCursor {
+    /// 读取缓存的下一项偏移。
     pub fn offset_on(&self, dtb: RefDtb) -> usize {
         (dtb.borrow().structure[self.0].0 >> 8) as _
     }
 
+    /// 利用缓存的名字长度取出名字。
     pub fn name_on<'a>(&self, dtb: RefDtb<'a>) -> (&'a [u8], BodyCursor) {
         let structure = &dtb.borrow().structure;
         let len_name = (structure[self.0].0 & 0xff) as usize;
@@ -193,8 +195,15 @@ impl GroupCursor {
     }
 
     /// 组结构恢复原状。
-    pub fn drop_on(&self, _dtb: RefDtb) {
-        // todo!()
+    pub fn drop_on(&self, dtb: RefDtb, len_item: usize) {
+        use StructureBlock as B;
+        let structure = &mut *dtb.borrow_mut().structure;
+        let mut i = self.0;
+        for _ in 0..len_item {
+            let offset = (structure[i].0 >> 8) as usize;
+            structure[i] = B::NODE_BEGIN;
+            i += offset;
+        }
     }
 }
 

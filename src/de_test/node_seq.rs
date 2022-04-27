@@ -1,4 +1,4 @@
-﻿use super::{r#struct::StructDeserializer, BodyCursor, GroupCursor, RefDtb};
+﻿use super::{BodyCursor, GroupCursor, RefDtb, StructDeserializer};
 use core::{fmt::Debug, marker::PhantomData, mem::MaybeUninit};
 use serde::{de, Deserialize};
 
@@ -97,7 +97,7 @@ impl<T: Debug> Debug for NodeSeq<'_, T> {
 
 impl<T> Drop for NodeSeq<'_, T> {
     fn drop(&mut self) {
-        self.cursor.drop_on(self.dtb)
+        self.cursor.drop_on(self.dtb, self.len_item);
     }
 }
 

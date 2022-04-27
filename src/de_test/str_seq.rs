@@ -128,8 +128,8 @@ impl Drop for StrSeq<'_> {
             let mut idx = data.len() - 1;
             loop {
                 let len = data[idx] as usize;
-                if idx > len + 1 {
-                    data[idx] = 0;
+                data[idx] = 0;
+                if idx > len {
                     idx -= len + 1;
                 } else {
                     break;
