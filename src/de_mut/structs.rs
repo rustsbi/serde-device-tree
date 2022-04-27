@@ -143,4 +143,4 @@ impl Dtb {
     }
 }
 
-pub type RefDtb<'a> = &'a RefCell<Dtb>;
+pub(super) type RefDtb<'a> = &'a RefCell<Dtb>;

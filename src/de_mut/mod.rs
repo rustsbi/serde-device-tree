@@ -11,15 +11,16 @@ mod structs;
 
 pub use node_seq::NodeSeq;
 pub use str_seq::StrSeq;
-pub use structs::{Dtb, DtbPtr, RefDtb};
+pub use structs::{Dtb, DtbPtr};
 
 use cursor::{BodyCursor, Cursor, GroupCursor, PropCursor};
 use data::BorrowedValueDeserializer;
 use r#struct::StructDeserializer;
-use structs::StructureBlock;
+use structs::{RefDtb, StructureBlock};
 
 use self::group::GroupDeserializer;
 
+/// 只在栈上计算，实现设备树解析。
 pub fn from_raw_mut<'de, T>(dtb: RefDtb<'de>) -> Result<T, DtError>
 where
     T: de::Deserialize<'de>,

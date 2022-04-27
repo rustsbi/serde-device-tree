@@ -20,12 +20,12 @@ pub mod de;
 pub mod error;
 
 mod common;
-mod de_test;
+mod de_mut;
 
 #[doc(inline)]
 pub use de::from_raw;
 
-pub use de_test::{from_raw_mut, Dtb, DtbPtr, NodeSeq, StrSeq};
+pub use de_mut::{from_raw_mut, Dtb, DtbPtr, NodeSeq, StrSeq};
 
 #[doc(inline)]
 pub use error::{Error, Result};
