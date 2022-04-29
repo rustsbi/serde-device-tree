@@ -80,6 +80,14 @@ impl<'de, T> NodeSeq<'de, T> {
         res
     }
 
+    pub fn len(&self) -> usize {
+        self.len_item
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len_item == 0
+    }
+
     pub fn iter<'b>(&'b self) -> NodeSeqIter<'de, 'b, T> {
         NodeSeqIter {
             seq: self,

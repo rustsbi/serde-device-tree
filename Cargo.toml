@@ -1,9 +1,7 @@
 [package]
 name = "serde-device-tree"
 version = "0.0.1"
-authors = [
-    "Luo Jia <me@luojia.cc>",
-]
+authors = ["Luo Jia <me@luojia.cc>"]
 repository = "https://github.com/luojia65/serde-device-tree"
 documentation = "https://docs.rs/serde-device-tree"
 license = "MulanPSL-2.0"

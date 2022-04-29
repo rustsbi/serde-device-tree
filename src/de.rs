@@ -176,11 +176,11 @@ impl<'a> Tags<'a> {
             }
             cur += 1;
         }
-        return Err(Error::table_string_offset(
+        Err(Error::table_string_offset(
             pos,
             cur as u32,
             self.file_index(),
-        ));
+        ))
     }
 }
 
@@ -283,7 +283,7 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer<'de> {
     {
         match self.peek_tag()? {
             Some(Tag::Prop(_, value_slice)) => {
-                if value_slice.len() == 0 {
+                if value_slice.is_empty() {
                     self.deserialize_bool(visitor)
                 } else if value_slice.len() == 4 {
                     self.deserialize_u32(visitor)
@@ -303,7 +303,7 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer<'de> {
     {
         match self.peek_tag_index()? {
             Some((Tag::Prop(value_slice, _name_slice), _file_index)) => {
-                if value_slice.len() == 0 {
+                if value_slice.is_empty() {
                     self.eat_tag()?;
                     visitor.visit_bool(true)
                 } else {
@@ -627,7 +627,7 @@ impl<'de, 'b> de::MapAccess<'de> for MapVisitor<'de, 'b> {
                 .deserialize(serde::de::value::BorrowedBytesDeserializer::new(name_slice))
                 .map(Some),
             Some(Tag::End) => Ok(None),
-            None => return Err(Error::no_remaining_tags()),
+            None => Err(Error::no_remaining_tags()),
         }
     }
 
@@ -639,7 +639,7 @@ impl<'de, 'b> de::MapAccess<'de> for MapVisitor<'de, 'b> {
             Some(Tag::Prop(_value_slice, _name_slice)) => seed.deserialize(&mut *self.de),
             Some(Tag::Begin(_name_slice)) => seed.deserialize(&mut *self.de),
             Some(Tag::End) => panic!(),
-            None => return Err(Error::no_remaining_tags()),
+            None => Err(Error::no_remaining_tags()),
         }
     }
 }

@@ -73,7 +73,7 @@ impl StructureBlock {
     }
 
     /// '\0' 结尾字符串的实际结尾。
-    pub const fn str_end(&self) -> *const u8 {
+    pub fn str_end(&self) -> *const u8 {
         let remnant = match self.0.to_ne_bytes() {
             [0, _, _, _] => 0,
             [_, 0, _, _] => 1,
