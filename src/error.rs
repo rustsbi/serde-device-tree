@@ -78,6 +78,7 @@ pub enum ErrorType {
     InvalidSerdeTypeLength {
         expected_length: u8,
     },
+    DeserializeNotComplete,
     Utf8(core::str::Utf8Error),
 }
 
@@ -258,6 +259,13 @@ impl Error {
     pub fn invalid_serde_type_length(expected_length: u8, file_index: usize) -> Error {
         Error::Typed {
             error_type: ErrorType::InvalidSerdeTypeLength { expected_length },
+            file_index,
+        }
+    }
+    #[inline]
+    pub fn deserialize_not_complete(file_index: usize) -> Error {
+        Error::Typed {
+            error_type: ErrorType::DeserializeNotComplete,
             file_index,
         }
     }

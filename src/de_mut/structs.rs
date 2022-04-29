@@ -48,6 +48,9 @@ impl DtbPtr {
 #[repr(transparent)]
 pub(super) struct StructureBlock(pub u32);
 
+/// 结构块长度。
+pub(super) const BLOCK_LEN: usize = core::mem::size_of::<StructureBlock>();
+
 impl Display for StructureBlock {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:?}", u32::to_be_bytes(self.0))
@@ -140,6 +143,11 @@ impl Dtb {
     /// 构造一个可安全共享的设备树映射。
     pub fn share(self) -> RefCell<Self> {
         RefCell::new(self)
+    }
+
+    /// 获取结构块的相对偏移。
+    pub fn off_dt_struct(&self) -> usize {
+        u32::from_be(unsafe { &*(self.ptr as *const Header) }.off_dt_struct) as _
     }
 }
 

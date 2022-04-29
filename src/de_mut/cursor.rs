@@ -1,4 +1,4 @@
-﻿use super::{RefDtb, StructureBlock};
+﻿use super::{RefDtb, StructureBlock, BLOCK_LEN};
 use core::marker::PhantomData;
 
 #[derive(Clone, Copy, Debug)]
@@ -29,6 +29,11 @@ impl<T: Type> AnyCursor<T> {
     /// 移动 `n` 格。
     pub fn step_n(&mut self, len: usize) {
         self.0 += len;
+    }
+
+    /// 光标相对文件头的偏移。
+    pub fn file_index_on(&self, dtb: RefDtb) -> usize {
+        self.0 * BLOCK_LEN + dtb.borrow().off_dt_struct()
     }
 }
 
@@ -90,7 +95,7 @@ impl BodyCursor {
                 // 属性项
                 B::PROP => {
                     if let [_, len_data, _, ..] = &structure[self.0..] {
-                        self.0 += 3 + align(len_data.as_usize(), 4);
+                        self.0 += 3 + align(len_data.as_usize(), BLOCK_LEN);
                     } else {
                         todo!()
                     }
@@ -125,7 +130,7 @@ impl TitleCursor {
     /// 生成组光标。
     pub fn take_group_on(&self, dtb: RefDtb, name: &str) -> (GroupCursor, usize, BodyCursor) {
         let name_bytes = name.as_bytes();
-        let name_skip = align(name_bytes.len(), 4);
+        let name_skip = align(name_bytes.len(), BLOCK_LEN);
         let group = AnyCursor::<Group>(self.0, PhantomData);
 
         let mut body = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
@@ -169,7 +174,7 @@ impl GroupCursor {
         let bytes = structure[self.0 + 1].lead_slice(len_name);
         (
             bytes,
-            AnyCursor(self.0 + 1 + align(len_name, 4), PhantomData),
+            AnyCursor(self.0 + 1 + align(len_name, BLOCK_LEN), PhantomData),
         )
     }
 
@@ -186,7 +191,7 @@ impl GroupCursor {
                 .find(|(_, b)| **b == b'\0')
                 .map(|(i, _)| i)
                 .unwrap();
-            body.step_n(align(len_total, 4));
+            body.step_n(align(len_total, BLOCK_LEN));
             body.skip_str_on(dtb);
             body.escape_from(dtb);
             let off_next = body.0 - current;
@@ -218,7 +223,10 @@ impl PropCursor {
             let len = s.iter().take_while(|b| **b != b'\0').count();
             (
                 unsafe { str::from_utf8_unchecked(slice::from_raw_parts(s.as_ptr(), len)) },
-                AnyCursor(self.0 + 3 + align(len_data.as_usize(), 4), PhantomData),
+                AnyCursor(
+                    self.0 + 3 + align(len_data.as_usize(), BLOCK_LEN),
+                    PhantomData,
+                ),
             )
         } else {
             todo!()
