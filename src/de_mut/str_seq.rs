@@ -2,11 +2,24 @@
 use core::{fmt::Debug, marker::PhantomData, mem::MaybeUninit};
 use serde::{de, Deserialize};
 
+/// 一组 '\0' 分隔字符串的映射。
+///
+/// `compatible = "sifive,clint0","riscv,clint0";`
+/// 这样的一条属性会被编译为两个连续的 '\0' 结尾字符串。
+/// `StrSeq` 可以自动将它们分开。
+///
+/// `iter` 方法会创建一个迭代器，用于依次访问这些字符串。
+/// 根据实现，迭代器会以从右到左的顺序返回这些字符串。
+///
+/// 构建时，所有字符串被遍历，所有分隔位置被记录下来。
+/// 这需要修改 DTB 上字符串所在位置的内存，因此需要这块内存的写权限。
+/// 如果要以其他方式解析 DTB，先将 `StrSeq` 释放，否则可能引发错误。
 pub struct StrSeq<'de> {
     dtb: RefDtb<'de>,
     cursor: PropCursor,
 }
 
+/// '\0' 分隔字符串组迭代器。
 pub struct StrSeqIter<'de, 'b> {
     seq: &'b StrSeq<'de>,
     i: usize,
@@ -36,7 +49,10 @@ impl<'de, 'b> Deserialize<'de> for StrSeq<'b> {
                 if v.len() == core::mem::size_of::<Self::Value>() {
                     Ok(Self::Value::from_raw_parts(v.as_ptr()))
                 } else {
-                    todo!("{} != {}", v.len(), core::mem::size_of::<Self::Value>());
+                    Err(E::invalid_length(
+                        v.len(),
+                        &"`StrSeq` is copied with wrong size.",
+                    ))
                 }
             }
         }
@@ -78,6 +94,7 @@ impl<'de> StrSeq<'de> {
         res
     }
 
+    /// 构造一个可访问每个字符串的迭代器。
     pub fn iter<'b>(&'b self) -> StrSeqIter<'de, 'b> {
         StrSeqIter {
             seq: self,
