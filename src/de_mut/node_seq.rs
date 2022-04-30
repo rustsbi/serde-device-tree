@@ -2,38 +2,43 @@
 use core::{fmt::Debug, marker::PhantomData, mem::MaybeUninit};
 use serde::{de, Deserialize};
 
-pub struct NodeSeq<'de, T> {
+/// 一组名字以 `@...` 区分，同类、同级且连续的节点的映射。
+///
+/// 在解析前，无法得知这种节点的数量，因此也无法为它们分配足够的空间，
+/// 因此这些节点将延迟解析。
+/// 迭代 `NodeSeq` 可获得一系列 [`NodeSeqItem`]，再调用 `deserialize` 方法分别解析每个节点。
+pub struct NodeSeq<'de> {
     dtb: RefDtb<'de>,
     cursor: GroupCursor,
     len_item: usize,
     len_name: usize,
-    _phantom: PhantomData<T>,
 }
 
-pub struct NodeSeqIter<'de, 'b, T> {
-    seq: &'b NodeSeq<'de, T>,
+/// 连续节点迭代器。
+pub struct NodeSeqIter<'de, 'b> {
+    seq: &'b NodeSeq<'de>,
     cursor: GroupCursor,
     i: usize,
 }
 
-pub struct NodeSeqItem<'de, T> {
+/// 连续节点对象。
+pub struct NodeSeqItem<'de> {
     dtb: RefDtb<'de>,
     body: BodyCursor,
     at: &'de str,
-    _phantom: PhantomData<T>,
 }
 
-impl<'de, 'b, T> Deserialize<'de> for NodeSeq<'b, T> {
+impl<'de, 'b> Deserialize<'de> for NodeSeq<'b> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        struct Visitor<'de, 'b, T> {
-            marker: PhantomData<NodeSeq<'b, T>>,
+        struct Visitor<'de, 'b> {
+            marker: PhantomData<NodeSeq<'b>>,
             lifetime: PhantomData<&'de ()>,
         }
-        impl<'de, 'b, T> de::Visitor<'de> for Visitor<'de, 'b, T> {
-            type Value = NodeSeq<'b, T>;
+        impl<'de, 'b> de::Visitor<'de> for Visitor<'de, 'b> {
+            type Value = NodeSeq<'b>;
 
             fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
                 write!(formatter, "struct StrSeq")
@@ -47,7 +52,10 @@ impl<'de, 'b, T> Deserialize<'de> for NodeSeq<'b, T> {
                 if v.len() == core::mem::size_of::<Self::Value>() {
                     Ok(Self::Value::from_raw_parts(v.as_ptr()))
                 } else {
-                    todo!("{} != {}", v.len(), core::mem::size_of::<Self::Value>());
+                    Err(E::invalid_length(
+                        v.len(),
+                        &"`NodeSeq` is copied with wrong size.",
+                    ))
                 }
             }
         }
@@ -63,7 +71,7 @@ impl<'de, 'b, T> Deserialize<'de> for NodeSeq<'b, T> {
     }
 }
 
-impl<'de, T> NodeSeq<'de, T> {
+impl<'de> NodeSeq<'de> {
     fn from_raw_parts(ptr: *const u8) -> Self {
         // 直接从指针拷贝
         let res = unsafe {
@@ -80,15 +88,18 @@ impl<'de, T> NodeSeq<'de, T> {
         res
     }
 
-    pub fn len(&self) -> usize {
+    /// 连续节点总数。
+    pub const fn len(&self) -> usize {
         self.len_item
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.len_item == 0
+    /// 如果连续节点数量为零，返回 true。但连续节点数量不可能为零。
+    pub const fn is_empty(&self) -> bool {
+        false
     }
 
-    pub fn iter<'b>(&'b self) -> NodeSeqIter<'de, 'b, T> {
+    /// 获得节点迭代器。
+    pub const fn iter<'b>(&'b self) -> NodeSeqIter<'de, 'b> {
         NodeSeqIter {
             seq: self,
             cursor: self.cursor,
@@ -97,20 +108,29 @@ impl<'de, T> NodeSeq<'de, T> {
     }
 }
 
-impl<T: Debug> Debug for NodeSeq<'_, T> {
+impl Debug for NodeSeq<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "todo")
+        let mut iter = self.iter();
+        if let Some(s) = iter.next() {
+            write!(f, "[@{}", s.at)?;
+            for s in iter {
+                write!(f, ", @{}", s.at)?;
+            }
+            write!(f, "]")
+        } else {
+            unreachable!("NodeSeq contains at least one node.")
+        }
     }
 }
 
-impl<T> Drop for NodeSeq<'_, T> {
+impl Drop for NodeSeq<'_> {
     fn drop(&mut self) {
         self.cursor.drop_on(self.dtb, self.len_item);
     }
 }
 
-impl<'de, 'b, T> Iterator for NodeSeqIter<'de, 'b, T> {
-    type Item = NodeSeqItem<'de, T>;
+impl<'de, 'b> Iterator for NodeSeqIter<'de, 'b> {
+    type Item = NodeSeqItem<'de>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.i >= self.seq.len_item {
@@ -124,18 +144,21 @@ impl<'de, 'b, T> Iterator for NodeSeqIter<'de, 'b, T> {
                 dtb: self.seq.dtb,
                 body,
                 at: unsafe { core::str::from_utf8_unchecked(&name[self.seq.len_name + 1..]) },
-                _phantom: PhantomData,
             })
         }
     }
 }
 
-impl<'de, T: Deserialize<'de>> NodeSeqItem<'de, T> {
+impl NodeSeqItem<'_> {
+    /// 获得区分节点的序号。
     pub fn at(&self) -> &str {
         self.at
     }
+}
 
-    pub fn deserialize(&self) -> T {
+impl<'de> NodeSeqItem<'de> {
+    /// 反序列化一个节点的内容。
+    pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
         T::deserialize(&mut StructDeserializer {
             dtb: self.dtb,
             cursor: self.body,

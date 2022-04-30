@@ -43,7 +43,7 @@ fn main() -> Result<(), Error> {
         compatible: StrSeq<'a>,
         chosen: Option<Chosen<'a>>,
         cpus: Cpus<'a>,
-        memory: NodeSeq<'a, Memory<'a>>,
+        memory: NodeSeq<'a>,
     }
 
     #[derive(Deserialize)]
@@ -58,7 +58,7 @@ fn main() -> Result<(), Error> {
         timebase_frequency: u32,
         #[serde(rename = "u-boot,dm-spl", default)]
         u_boot_dm_spl: bool,
-        cpu: NodeSeq<'a, Cpu<'a>>,
+        cpu: NodeSeq<'a>,
     }
 
     #[derive(Deserialize)]
@@ -95,7 +95,7 @@ fn main() -> Result<(), Error> {
             println!(
                 "cpu@{}: compatible = {:?}",
                 cpu.at(),
-                cpu.deserialize().compatible
+                cpu.deserialize::<Cpu>().compatible
             );
         }
 
@@ -103,7 +103,7 @@ fn main() -> Result<(), Error> {
             println!(
                 "memory@{}: device_type = {:?}",
                 mem.at(),
-                mem.deserialize().device_type
+                mem.deserialize::<Memory>().device_type
             );
         }
         // 解析过程中，设备树的内容被修改了。

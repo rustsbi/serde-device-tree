@@ -10,7 +10,7 @@ struct Tree<'a> {
     compatible: StrSeq<'a>,
     chosen: Option<Chosen<'a>>,
     cpus: Cpus<'a>,
-    memory: NodeSeq<'a, Memory<'a>>,
+    memory: NodeSeq<'a>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -23,7 +23,7 @@ struct Chosen<'a> {
 #[serde(rename_all = "kebab-case")]
 struct Cpus<'a> {
     timebase_frequency: u32,
-    cpu: NodeSeq<'a, Cpu<'a>>,
+    cpu: NodeSeq<'a>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,7 +56,7 @@ fn main() {
             println!(
                 "cpu@{}: compatible = {:?}",
                 cpu.at(),
-                cpu.deserialize().compatible
+                cpu.deserialize::<Cpu>().compatible
             );
         }
 
@@ -64,7 +64,7 @@ fn main() {
             println!(
                 "memory@{}: device_type = {}",
                 mem.at(),
-                mem.deserialize().device_type
+                mem.deserialize::<Memory>().device_type
             );
         }
     }
