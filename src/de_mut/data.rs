@@ -1,8 +1,12 @@
-﻿use super::{DtError, PropCursor, RefDtb};
+﻿use super::{
+    buildin::{Reg, StrSeq},
+    DtError, PropCursor, RefDtb, RegConfig,
+};
 use serde::de;
 
 pub(super) struct BorrowedValueDeserializer<'de> {
     pub dtb: RefDtb<'de>,
+    pub reg: RegConfig,
     pub cursor: PropCursor,
 }
 
@@ -76,14 +80,7 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut BorrowedValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        let val = self.cursor.map_on(self.dtb, |data| {
-            if let [a, b, c, d] = *data {
-                u32::from_be_bytes([a, b, c, d])
-            } else {
-                unreachable!("u32")
-            }
-        });
-        visitor.visit_u32(val)
+        visitor.visit_u32(self.cursor.map_u32_on(self.dtb)?)
     }
 
     fn deserialize_u64<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -182,15 +179,37 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut BorrowedValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        if name == "StrSeq" {
-            visitor.visit_borrowed_bytes(unsafe {
-                core::slice::from_raw_parts(
-                    self as *const _ as *const u8,
-                    core::mem::size_of::<BorrowedValueDeserializer<'_>>(),
-                )
-            })
-        } else {
-            visitor.visit_newtype_struct(self)
+        match name {
+            "StrSeq" => {
+                let inner = super::str_seq::Inner {
+                    dtb: self.dtb,
+                    cursor: self.cursor,
+                };
+                visitor.visit_borrowed_bytes(unsafe {
+                    core::slice::from_raw_parts(
+                        &inner as *const _ as *const u8,
+                        core::mem::size_of::<StrSeq>(),
+                    )
+                })
+            }
+            "Reg" => {
+                let val = self
+                    .cursor
+                    .map_on(self.dtb, |data| self.reg.build_from(data))
+                    .ok_or_else(|| {
+                        DtError::buildin_type_parsed_error(
+                            "Reg",
+                            self.cursor.file_index_on(self.dtb),
+                        )
+                    })?;
+                visitor.visit_borrowed_bytes(unsafe {
+                    core::slice::from_raw_parts(
+                        &val as *const _ as *const u8,
+                        core::mem::size_of::<Reg>(),
+                    )
+                })
+            }
+            _ => visitor.visit_newtype_struct(self),
         }
     }
 

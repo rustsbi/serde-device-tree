@@ -1,4 +1,4 @@
-﻿use super::{BodyCursor, GroupCursor, RefDtb, StructDeserializer};
+﻿use super::{BodyCursor, GroupCursor, RefDtb, RegConfig, StructDeserializer};
 use core::{fmt::Debug, marker::PhantomData, mem::MaybeUninit};
 use serde::{de, Deserialize};
 
@@ -9,6 +9,7 @@ use serde::{de, Deserialize};
 /// 迭代 `NodeSeq` 可获得一系列 [`NodeSeqItem`]，再调用 `deserialize` 方法分别解析每个节点。
 pub struct NodeSeq<'de> {
     dtb: RefDtb<'de>,
+    reg: RegConfig,
     cursor: GroupCursor,
     len_item: usize,
     len_name: usize,
@@ -24,6 +25,7 @@ pub struct NodeSeqIter<'de, 'b> {
 /// 连续节点对象。
 pub struct NodeSeqItem<'de> {
     dtb: RefDtb<'de>,
+    reg: RegConfig,
     body: BodyCursor,
     at: &'de str,
 }
@@ -142,6 +144,7 @@ impl<'de, 'b> Iterator for NodeSeqIter<'de, 'b> {
             self.cursor.step_n(off_next);
             Some(Self::Item {
                 dtb: self.seq.dtb,
+                reg: self.seq.reg,
                 body,
                 at: unsafe { core::str::from_utf8_unchecked(&name[self.seq.len_name + 1..]) },
             })
@@ -161,6 +164,7 @@ impl<'de> NodeSeqItem<'de> {
     pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
         T::deserialize(&mut StructDeserializer {
             dtb: self.dtb,
+            reg: self.reg,
             cursor: self.body,
         })
         .unwrap()

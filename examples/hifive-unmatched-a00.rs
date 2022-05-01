@@ -7,9 +7,13 @@ use serde_derive::Deserialize;
 // - `DtbPtr`: 验证设备树首部正确性，后续也可借助这个类型传递设备树，多次解析不必重复验证。
 // - `Dtb`: 管理反序列化出的类型生命周期。
 // - `from_raw_mut`: 反序列化。
-// - `StrSeq`: '\0' 分隔的一组字符串，设备树中一种常见的属性类型，这个类型要求可变的内存。
+// - `Reg`: 常见属性。其值解析方式由 `#address-cells` 和 `#size-cells` 决定。
 // - `NodeSeq`: name@... 区分的一组同级同类的连续节点，这个类型要求可变的内存。
-use serde_device_tree::{from_raw_mut, Dtb, DtbPtr, Error, NodeSeq, StrSeq};
+// - `StrSeq`: '\0' 分隔的一组字符串，设备树中一种常见的属性类型，这个类型要求可变的内存。
+use serde_device_tree::{
+    buildin::{NodeSeq, Reg, StrSeq},
+    from_raw_mut, Dtb, DtbPtr, Error,
+};
 
 fn main() -> Result<(), Error> {
     // 整个设备树二进制文件需要装载到一块可写的内存区域
@@ -69,6 +73,7 @@ fn main() -> Result<(), Error> {
     #[derive(Deserialize)]
     struct Memory<'a> {
         device_type: StrSeq<'a>,
+        reg: Reg,
     }
 
     {
@@ -99,11 +104,13 @@ fn main() -> Result<(), Error> {
             );
         }
 
-        for mem in t.memory.iter() {
+        for item in t.memory.iter() {
+            let mem: Memory = item.deserialize();
             println!(
-                "memory@{}: device_type = {:?}",
-                mem.at(),
-                mem.deserialize::<Memory>().device_type
+                "memory@{}({:?}): {:#x?}",
+                item.at(),
+                mem.device_type,
+                mem.reg
             );
         }
         // 解析过程中，设备树的内容被修改了。

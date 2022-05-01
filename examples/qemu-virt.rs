@@ -1,7 +1,10 @@
 ﻿extern crate alloc;
 
 use serde_derive::Deserialize;
-use serde_device_tree::{from_raw_mut, Dtb, DtbPtr, NodeSeq, StrSeq};
+use serde_device_tree::{
+    buildin::{NodeSeq, StrSeq},
+    from_raw_mut, Dtb, DtbPtr,
+};
 
 static DEVICE_TREE: &[u8] = include_bytes!("qemu-virt.dtb");
 

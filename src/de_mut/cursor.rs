@@ -1,4 +1,4 @@
-﻿use super::{RefDtb, StructureBlock, BLOCK_LEN};
+﻿use super::{DtError, RefDtb, StructureBlock, BLOCK_LEN};
 use core::marker::PhantomData;
 
 #[derive(Clone, Copy, Debug)]
@@ -246,6 +246,26 @@ impl PropCursor {
             f(unsafe { core::slice::from_raw_parts(data.as_ptr() as _, len_data.as_usize()) })
         } else {
             todo!()
+        }
+    }
+
+    pub fn map_u32_on(&self, dtb: RefDtb<'_>) -> Result<u32, DtError> {
+        let structure = &dtb.borrow().structure[self.0..];
+        if let [_, len_data, _, data @ ..] = structure {
+            if len_data.as_usize() == BLOCK_LEN {
+                Ok(u32::from_be(data[0].0))
+            } else {
+                Err(DtError::buildin_type_parsed_error(
+                    "u32",
+                    self.file_index_on(dtb),
+                ))
+            }
+        } else {
+            Err(DtError::slice_eof_unpexpected(
+                (4 * BLOCK_LEN) as _,
+                (4 * structure.len()) as _,
+                self.file_index_on(dtb),
+            ))
         }
     }
 

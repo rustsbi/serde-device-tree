@@ -28,7 +28,7 @@ mod de_mut;
 pub use de::from_raw;
 
 #[doc(inline)]
-pub use de_mut::{from_raw_mut, Dtb, DtbPtr, NodeSeq, StrSeq};
+pub use de_mut::{buildin, from_raw_mut, Dtb, DtbPtr};
 
 #[doc(inline)]
 pub use error::{Error, Result};

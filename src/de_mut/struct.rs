@@ -1,8 +1,10 @@
-﻿use super::{BodyCursor, Cursor, DtError, RefDtb, StructAccess, Temp};
+﻿use super::{BodyCursor, Cursor, DtError, RefDtb, RegConfig, StructAccess, Temp};
 use serde::de;
 
+#[derive(Clone)]
 pub(super) struct StructDeserializer<'de> {
     pub dtb: RefDtb<'de>,
+    pub reg: RegConfig,
     pub cursor: BodyCursor,
 }
 

@@ -79,6 +79,9 @@ pub enum ErrorType {
         expected_length: u8,
     },
     DeserializeNotComplete,
+    BuildInTypeParseFailed {
+        expected: &'static str,
+    },
     Utf8(core::str::Utf8Error),
 }
 
@@ -266,6 +269,13 @@ impl Error {
     pub fn deserialize_not_complete(file_index: usize) -> Error {
         Error::Typed {
             error_type: ErrorType::DeserializeNotComplete,
+            file_index,
+        }
+    }
+    #[inline]
+    pub fn buildin_type_parsed_error(expected: &'static str, file_index: usize) -> Error {
+        Error::Typed {
+            error_type: ErrorType::BuildInTypeParseFailed { expected },
             file_index,
         }
     }

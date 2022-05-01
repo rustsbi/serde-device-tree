@@ -1,10 +1,11 @@
-﻿use super::{DtError, GroupCursor, RefDtb};
+﻿use super::{DtError, GroupCursor, RefDtb, RegConfig};
 use serde::de;
 
 #[allow(unused)]
 pub(super) struct GroupDeserializer<'de> {
     pub dtb: RefDtb<'de>,
     pub cursor: GroupCursor,
+    pub reg: RegConfig,
     pub len_item: usize,
     pub len_name: usize,
 }

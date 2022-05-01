@@ -14,15 +14,17 @@ use serde::{de, Deserialize};
 /// 构建时，所有字符串被遍历，所有分隔位置被记录下来。
 /// 这需要修改 DTB 上字符串所在位置的内存，因此需要这块内存的写权限。
 /// 如果要以其他方式解析 DTB，先将 `StrSeq` 释放，否则可能引发错误。
-pub struct StrSeq<'de> {
-    dtb: RefDtb<'de>,
-    cursor: PropCursor,
-}
+pub struct StrSeq<'de>(Inner<'de>);
 
 /// '\0' 分隔字符串组迭代器。
-pub struct StrSeqIter<'de, 'b> {
-    seq: &'b StrSeq<'de>,
+pub struct StrSeqIter<'de> {
+    data: &'de [u8],
     i: usize,
+}
+
+pub(super) struct Inner<'de> {
+    pub dtb: RefDtb<'de>,
+    pub cursor: PropCursor,
 }
 
 impl<'de, 'b> Deserialize<'de> for StrSeq<'b> {
@@ -81,7 +83,7 @@ impl<'de> StrSeq<'de> {
             res.assume_init()
         };
         // 初始化
-        res.cursor.operate_on(res.dtb, |data| {
+        res.0.cursor.operate_on(res.0.dtb, |data| {
             let mut i = data.len() - 1;
             for j in (0..data.len() - 1).rev() {
                 if data[j] == b'\0' {
@@ -95,10 +97,11 @@ impl<'de> StrSeq<'de> {
     }
 
     /// 构造一个可访问每个字符串的迭代器。
-    pub fn iter<'b>(&'b self) -> StrSeqIter<'de, 'b> {
+    pub fn iter<'b>(&'b self) -> StrSeqIter<'de> {
+        let data = self.0.cursor.data_on(self.0.dtb);
         StrSeqIter {
-            seq: self,
-            i: self.cursor.map_on(self.dtb, |data| data.len()),
+            data,
+            i: data.len(),
         }
     }
 }
@@ -118,30 +121,28 @@ impl Debug for StrSeq<'_> {
     }
 }
 
-impl<'de, 'b> Iterator for StrSeqIter<'de, 'b> {
-    type Item = &'b str;
+impl<'de> Iterator for StrSeqIter<'de> {
+    type Item = &'de str;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.seq.cursor.map_on(self.seq.dtb, |data| {
-            if self.i == 0 {
-                None
-            } else {
-                let idx = self.i - 1;
-                let len = data[idx] as usize;
-                self.i = idx - len;
-                let ptr = data[self.i..].as_ptr();
-                unsafe {
-                    let s = core::slice::from_raw_parts(ptr, len);
-                    Some(core::str::from_utf8_unchecked(s))
-                }
+        if self.i == 0 {
+            None
+        } else {
+            let idx = self.i - 1;
+            let len = self.data[idx] as usize;
+            self.i = idx - len;
+            let ptr = self.data[self.i..].as_ptr();
+            unsafe {
+                let s = core::slice::from_raw_parts(ptr, len);
+                Some(core::str::from_utf8_unchecked(s))
             }
-        })
+        }
     }
 }
 
 impl Drop for StrSeq<'_> {
     fn drop(&mut self) {
-        self.cursor.operate_on(self.dtb, |data| {
+        self.0.cursor.operate_on(self.0.dtb, |data| {
             let mut idx = data.len() - 1;
             loop {
                 let len = data[idx] as usize;

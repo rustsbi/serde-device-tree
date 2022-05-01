@@ -8,18 +8,21 @@ mod cursor;
 mod data;
 mod group;
 mod node_seq;
+mod reg;
 mod str_seq;
 mod r#struct;
 mod structs;
 
-pub use node_seq::NodeSeq;
-pub use str_seq::StrSeq;
 pub use structs::{Dtb, DtbPtr};
+pub mod buildin {
+    pub use super::{node_seq::NodeSeq, reg::Reg, str_seq::StrSeq};
+}
 
 use cursor::{BodyCursor, Cursor, GroupCursor, PropCursor};
 use data::BorrowedValueDeserializer;
 use group::GroupDeserializer;
 use r#struct::StructDeserializer;
+use reg::RegConfig;
 use structs::{RefDtb, StructureBlock, BLOCK_LEN};
 
 /// 从 [`RefDtb`] 反序列化一个描述设备树的 `T` 类型实例。
@@ -34,6 +37,7 @@ where
     // 从一个跳过根节点名字的光标初始化解析器。
     let mut d = StructDeserializer {
         dtb,
+        reg: RegConfig::DEFAULT,
         cursor: BodyCursor::ROOT,
     };
     T::deserialize(&mut d).and_then(|t| {
@@ -104,6 +108,15 @@ impl<'de, 'b> de::MapAccess<'de> for StructAccess<'de, 'b> {
                 Cursor::Prop(c) => {
                     let (name, next) = c.name_on(self.de.dtb);
                     self.de.cursor = next;
+                    match name {
+                        "#address-cells" => {
+                            self.de.reg.address_cells = c.map_u32_on(self.de.dtb)?;
+                        }
+                        "#size-cells" => {
+                            self.de.reg.size_cells = c.map_u32_on(self.de.dtb)?;
+                        }
+                        _ => {}
+                    }
                     if self.fields.contains(&name) {
                         self.temp = Temp::Prop(c);
                         break name;
@@ -127,13 +140,17 @@ impl<'de, 'b> de::MapAccess<'de> for StructAccess<'de, 'b> {
         match self.temp {
             Temp::Node => {
                 // 键是独立节点名字，递归
-                seed.deserialize(&mut *self.de)
+                let mut child = self.de.clone();
+                let res = seed.deserialize(&mut child)?;
+                self.de.cursor = child.cursor;
+                Ok(res)
             }
             Temp::Group(cursor, len_item, len_name) => {
                 // 键是组名字，构造组反序列化器
                 seed.deserialize(&mut GroupDeserializer {
                     dtb: self.de.dtb,
                     cursor,
+                    reg: self.de.reg,
                     len_item,
                     len_name,
                 })
@@ -142,6 +159,7 @@ impl<'de, 'b> de::MapAccess<'de> for StructAccess<'de, 'b> {
                 // 键是属性名字，构造属性反序列化器
                 seed.deserialize(&mut BorrowedValueDeserializer {
                     dtb: self.de.dtb,
+                    reg: self.de.reg,
                     cursor,
                 })
             }
