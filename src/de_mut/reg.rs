@@ -1,13 +1,24 @@
-﻿use super::BLOCK_LEN;
-use core::{fmt::Debug, marker::PhantomData};
+﻿use super::{PropCursor, RefDtb, StructureBlock, BLOCK_LEN};
+use core::{fmt::Debug, marker::PhantomData, mem::MaybeUninit, ops::Range};
 use serde::{de, Deserialize};
 
 /// 节点地址空间。
-#[derive(Clone, Copy, Debug)]
-pub struct Reg {
-    pub base: usize,
-    pub len: usize,
+pub struct Reg<'de>(Inner<'de>);
+
+pub(super) struct Inner<'de> {
+    pub dtb: RefDtb<'de>,
+    pub cursor: PropCursor,
+    pub reg: RegConfig,
 }
+
+/// 地址段迭代器。
+pub struct RegIter<'de> {
+    data: &'de [u8],
+    config: RegConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct RegRegion(pub Range<usize>);
 
 /// 节点地址空间格式。
 #[derive(Clone, Copy, Debug)]
@@ -23,17 +34,17 @@ impl RegConfig {
     };
 }
 
-impl<'de, 'b> Deserialize<'de> for Reg {
+impl<'de, 'b> Deserialize<'de> for Reg<'b> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        struct Visitor<'de> {
-            marker: PhantomData<Reg>,
+        struct Visitor<'de, 'b> {
+            marker: PhantomData<Reg<'b>>,
             lifetime: PhantomData<&'de ()>,
         }
-        impl<'de, 'b> de::Visitor<'de> for Visitor<'de> {
-            type Value = Reg;
+        impl<'de, 'b> de::Visitor<'de> for Visitor<'de, 'b> {
+            type Value = Reg<'b>;
 
             fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
                 write!(formatter, "struct Reg")
@@ -45,7 +56,7 @@ impl<'de, 'b> Deserialize<'de> for Reg {
             {
                 // 结构体转为内存切片，然后拷贝过来
                 if v.len() == core::mem::size_of::<Self::Value>() {
-                    Ok(unsafe { *(v.as_ptr() as *const Self::Value) })
+                    Ok(Self::Value::from_raw_parts(v.as_ptr()))
                 } else {
                     Err(E::invalid_length(
                         v.len(),
@@ -66,21 +77,66 @@ impl<'de, 'b> Deserialize<'de> for Reg {
     }
 }
 
-impl RegConfig {
-    pub fn build_from(&self, data: &[u8]) -> Option<Reg> {
-        let len = (self.address_cells + self.size_cells) as usize;
-        if data.len() == BLOCK_LEN * len {
-            let mut u32s = unsafe { core::slice::from_raw_parts(data.as_ptr() as *const u32, len) }
-                .iter()
-                .map(|val| u32::from_be(*val));
-            let mut reg = Reg { base: 0, len: 0 };
-            for _ in 0..self.address_cells {
-                reg.base = (reg.base << 32) | u32s.next().unwrap() as usize;
+impl Reg<'_> {
+    fn from_raw_parts(ptr: *const u8) -> Self {
+        // 直接从指针拷贝
+        unsafe {
+            let mut res = MaybeUninit::<Self>::uninit();
+            core::ptr::copy_nonoverlapping(
+                ptr,
+                res.as_mut_ptr() as *mut _,
+                core::mem::size_of::<Self>(),
+            );
+            res.assume_init()
+        }
+    }
+
+    pub fn iter(&self) -> RegIter {
+        RegIter {
+            data: self.0.cursor.data_on(self.0.dtb),
+            config: self.0.reg,
+        }
+    }
+}
+
+impl Debug for Reg<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut iter = self.iter();
+        if let Some(s) = iter.next() {
+            write!(f, "[{:#x?}", s.0)?;
+            for s in iter {
+                write!(f, ", {:#x?}", s.0)?;
             }
-            for _ in 0..self.size_cells {
-                reg.len = (reg.len << 32) | u32s.next().unwrap() as usize;
+            write!(f, "]")
+        } else {
+            write!(f, "[]")
+        }
+    }
+}
+
+impl Iterator for RegIter<'_> {
+    type Item = RegRegion;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let len = BLOCK_LEN * (self.config.address_cells + self.config.size_cells) as usize;
+        if self.data.len() >= len {
+            let mut block = self.data.as_ptr() as *const StructureBlock;
+            self.data = &self.data[len..];
+            let mut base = 0;
+            let mut len = 0;
+            for _ in 0..self.config.address_cells {
+                unsafe {
+                    base = (base << 32) | (*block).as_usize();
+                    block = block.offset(1);
+                }
             }
-            Some(reg)
+            for _ in 0..self.config.size_cells {
+                unsafe {
+                    len = (len << 32) | (*block).as_usize();
+                    block = block.offset(1);
+                }
+            }
+            Some(RegRegion(base..base + len))
         } else {
             None
         }

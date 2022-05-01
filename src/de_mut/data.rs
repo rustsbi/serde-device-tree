@@ -1,7 +1,4 @@
-﻿use super::{
-    buildin::{Reg, StrSeq},
-    DtError, PropCursor, RefDtb, RegConfig,
-};
+﻿use super::{DtError, PropCursor, RefDtb, RegConfig};
 use serde::de;
 
 pub(super) struct BorrowedValueDeserializer<'de> {
@@ -188,24 +185,20 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut BorrowedValueDeserializer<'de> {
                 visitor.visit_borrowed_bytes(unsafe {
                     core::slice::from_raw_parts(
                         &inner as *const _ as *const u8,
-                        core::mem::size_of::<StrSeq>(),
+                        core::mem::size_of_val(&inner),
                     )
                 })
             }
             "Reg" => {
-                let val = self
-                    .cursor
-                    .map_on(self.dtb, |data| self.reg.build_from(data))
-                    .ok_or_else(|| {
-                        DtError::buildin_type_parsed_error(
-                            "Reg",
-                            self.cursor.file_index_on(self.dtb),
-                        )
-                    })?;
+                let inner = super::reg::Inner {
+                    dtb: self.dtb,
+                    reg: self.reg,
+                    cursor: self.cursor,
+                };
                 visitor.visit_borrowed_bytes(unsafe {
                     core::slice::from_raw_parts(
-                        &val as *const _ as *const u8,
-                        core::mem::size_of::<Reg>(),
+                        &inner as *const _ as *const u8,
+                        core::mem::size_of_val(&inner),
                     )
                 })
             }

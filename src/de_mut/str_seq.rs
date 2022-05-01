@@ -16,15 +16,14 @@ use serde::{de, Deserialize};
 /// 如果要以其他方式解析 DTB，先将 `StrSeq` 释放，否则可能引发错误。
 pub struct StrSeq<'de>(Inner<'de>);
 
-/// '\0' 分隔字符串组迭代器。
-pub struct StrSeqIter<'de> {
-    data: &'de [u8],
-    i: usize,
-}
-
 pub(super) struct Inner<'de> {
     pub dtb: RefDtb<'de>,
     pub cursor: PropCursor,
+}
+
+/// '\0' 分隔字符串组迭代器。
+pub struct StrSeqIter<'de> {
+    data: &'de [u8],
 }
 
 impl<'de, 'b> Deserialize<'de> for StrSeq<'b> {
@@ -70,7 +69,7 @@ impl<'de, 'b> Deserialize<'de> for StrSeq<'b> {
     }
 }
 
-impl<'de> StrSeq<'de> {
+impl StrSeq<'_> {
     fn from_raw_parts(ptr: *const u8) -> Self {
         // 直接从指针拷贝
         let res = unsafe {
@@ -97,11 +96,9 @@ impl<'de> StrSeq<'de> {
     }
 
     /// 构造一个可访问每个字符串的迭代器。
-    pub fn iter<'b>(&'b self) -> StrSeqIter<'de> {
-        let data = self.0.cursor.data_on(self.0.dtb);
+    pub fn iter(&self) -> StrSeqIter {
         StrSeqIter {
-            data,
-            i: data.len(),
+            data: self.0.cursor.data_on(self.0.dtb),
         }
     }
 }
@@ -125,17 +122,13 @@ impl<'de> Iterator for StrSeqIter<'de> {
     type Item = &'de str;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.i == 0 {
+        if self.data.is_empty() {
             None
         } else {
-            let idx = self.i - 1;
-            let len = self.data[idx] as usize;
-            self.i = idx - len;
-            let ptr = self.data[self.i..].as_ptr();
-            unsafe {
-                let s = core::slice::from_raw_parts(ptr, len);
-                Some(core::str::from_utf8_unchecked(s))
-            }
+            let len = *self.data.last().unwrap() as usize;
+            let (a, b) = self.data.split_at(self.data.len() - len - 1);
+            self.data = a;
+            Some(unsafe { core::str::from_utf8_unchecked(&b[..len]) })
         }
     }
 }
