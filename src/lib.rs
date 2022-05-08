@@ -8,7 +8,9 @@
 // MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 // See the Mulan PSL v2 for more details.
 
-//! This library contains a device tree blob deserializer with no-std suppport.
+//! This library contains two device tree blob deserializers,
+//! one with no-std support,
+//! the other one doesn't even need alloc.
 
 #![feature(ptr_metadata)]
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -19,8 +21,14 @@ extern crate alloc;
 pub mod de;
 pub mod error;
 
+mod common;
+mod de_mut;
+
 #[doc(inline)]
 pub use de::from_raw;
+
+#[doc(inline)]
+pub use de_mut::{buildin, from_raw_mut, Dtb, DtbPtr};
 
 #[doc(inline)]
 pub use error::{Error, Result};

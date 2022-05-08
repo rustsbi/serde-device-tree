@@ -14,6 +14,8 @@
 use alloc::{format, string::String};
 use core::fmt;
 
+use crate::common::ALIGN;
+
 /// Represents all possible errors that can occur when serializing or deserializing device tree data.
 #[derive(Clone, Debug)]
 pub enum Error {
@@ -30,6 +32,10 @@ pub enum Error {
 /// All error types that would occur from device tree serializing and deserializing.
 #[derive(Debug, Clone, Copy)]
 pub enum ErrorType {
+    Unaligned {
+        ptr_value: usize,
+        align: usize,
+    },
     InvalidMagic {
         wrong_magic: u32,
     },
@@ -72,19 +78,33 @@ pub enum ErrorType {
     InvalidSerdeTypeLength {
         expected_length: u8,
     },
+    DeserializeNotComplete,
+    BuildInTypeParseFailed {
+        expected: &'static str,
+    },
     Utf8(core::str::Utf8Error),
 }
 
 impl Error {
     #[inline]
-    pub fn invalid_magic(wrong_magic: u32, file_index: usize) -> Error {
+    pub const fn unaligned(ptr_value: usize) -> Error {
         Error::Typed {
-            error_type: ErrorType::InvalidMagic { wrong_magic },
-            file_index,
+            error_type: ErrorType::Unaligned {
+                ptr_value,
+                align: ALIGN,
+            },
+            file_index: 0,
         }
     }
     #[inline]
-    pub fn incompatible_version(
+    pub const fn invalid_magic(wrong_magic: u32) -> Error {
+        Error::Typed {
+            error_type: ErrorType::InvalidMagic { wrong_magic },
+            file_index: 0,
+        }
+    }
+    #[inline]
+    pub const fn incompatible_version(
         last_comp_version: u32,
         library_supported_version: u32,
         file_index: usize,
@@ -108,14 +128,9 @@ impl Error {
         }
     }
     #[inline]
-    pub fn u32_index_space_overflow(
-        current_index: u32,
-        file_index: usize,
-    ) -> Error {
+    pub fn u32_index_space_overflow(current_index: u32, file_index: usize) -> Error {
         Error::Typed {
-            error_type: ErrorType::U32IndexSpace {
-                current_index
-            },
+            error_type: ErrorType::U32IndexSpace { current_index },
             file_index,
         }
     }
@@ -180,6 +195,22 @@ impl Error {
         }
     }
     #[inline]
+    pub fn mem_rsvmap_index_underflow(
+        begin_index: u32,
+        at_least_index: u32,
+        file_index: usize,
+    ) -> Error {
+        Error::Typed {
+            error_type: ErrorType::StructureIndex {
+                current_index: begin_index,
+                bound_index: at_least_index,
+                structure_or_string: false,
+                overflow_or_underflow: false,
+            },
+            file_index,
+        }
+    }
+    #[inline]
     pub fn string_eof_unpexpected(file_index: usize) -> Error {
         Error::Typed {
             error_type: ErrorType::StringEofUnexpected,
@@ -235,6 +266,20 @@ impl Error {
         }
     }
     #[inline]
+    pub fn deserialize_not_complete(file_index: usize) -> Error {
+        Error::Typed {
+            error_type: ErrorType::DeserializeNotComplete,
+            file_index,
+        }
+    }
+    #[inline]
+    pub fn buildin_type_parsed_error(expected: &'static str, file_index: usize) -> Error {
+        Error::Typed {
+            error_type: ErrorType::BuildInTypeParseFailed { expected },
+            file_index,
+        }
+    }
+    #[inline]
     pub fn utf8(error: core::str::Utf8Error, file_index: usize) -> Error {
         Error::Typed {
             error_type: ErrorType::Utf8(error),
@@ -268,18 +313,17 @@ impl Error {
 pub type Result<T> = core::result::Result<T, Error>;
 
 impl serde::de::Error for Error {
-    fn custom<T>(msg: T) -> Self
+    fn custom<T>(_msg: T) -> Self
     where
         T: fmt::Display,
     {
         #[cfg(feature = "alloc")]
         {
-            Self::Custom(format!("{}", msg))
+            Self::Custom(format!("{}", _msg))
         }
 
         #[cfg(not(feature = "alloc"))]
         {
-            let _ = msg; // todo
             Self::Custom
         }
     }

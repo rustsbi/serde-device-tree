@@ -10,7 +10,10 @@
 
 //! Deserialize device tree data to a Rust data structure.
 
-use crate::error::{Error, Result};
+use crate::{
+    common::*,
+    error::{Error, Result},
+};
 use core::iter::Peekable;
 use serde::de;
 
@@ -19,6 +22,10 @@ use serde::de;
 /// This function is useful in developing device tree compatible firmware
 /// or operating system kernels to parse structure from previous bootloading
 /// stage.
+///
+/// # Safety
+///
+/// TODO
 ///
 /// # Example
 ///
@@ -53,68 +60,9 @@ where
 {
     // read header
     let header = &*(ptr as *const Header);
-    let magic = u32::from_be(header.magic);
-    if magic != DEVICE_TREE_MAGIC {
-        let file_index =
-            (&header.magic as *const _ as usize) - (&header.magic as *const _ as usize);
-        return Err(Error::invalid_magic(magic, file_index));
-    }
-    let last_comp_version = u32::from_be(header.last_comp_version);
-    if last_comp_version > SUPPORTED_VERSION {
-        let file_index =
-            (&header.last_comp_version as *const _ as usize) - (&header.magic as *const _ as usize);
-        return Err(Error::incompatible_version(
-            last_comp_version,
-            SUPPORTED_VERSION,
-            file_index,
-        ));
-    }
+    header.verify()?;
+
     let total_size = u32::from_be(header.total_size);
-    if total_size < HEADER_LEN {
-        let file_index =
-            (&header.total_size as *const _ as usize) - (&header.magic as *const _ as usize);
-        return Err(Error::header_too_short(total_size, HEADER_LEN, file_index));
-    }
-    let off_dt_struct = u32::from_be(header.off_dt_struct);
-    if off_dt_struct < HEADER_LEN {
-        let file_index =
-            (&header.off_dt_struct as *const _ as usize) - (&header.magic as *const _ as usize);
-        return Err(Error::structure_index_underflow(
-            off_dt_struct,
-            HEADER_LEN,
-            file_index,
-        ));
-    }
-    let size_dt_struct = u32::from_be(header.size_dt_struct);
-    if off_dt_struct + size_dt_struct > total_size {
-        let file_index =
-            (&header.size_dt_struct as *const _ as usize) - (&header.magic as *const _ as usize);
-        return Err(Error::structure_index_overflow(
-            off_dt_struct + size_dt_struct,
-            HEADER_LEN,
-            file_index,
-        ));
-    }
-    let off_dt_strings = u32::from_be(header.off_dt_strings);
-    if off_dt_strings < HEADER_LEN {
-        let file_index =
-            (&header.off_dt_strings as *const _ as usize) - (&header.magic as *const _ as usize);
-        return Err(Error::string_index_underflow(
-            off_dt_strings,
-            HEADER_LEN,
-            file_index,
-        ));
-    }
-    let size_dt_strings = u32::from_be(header.size_dt_strings);
-    if off_dt_struct + size_dt_strings > total_size {
-        let file_index =
-            (&header.size_dt_strings as *const _ as usize) - (&header.magic as *const _ as usize);
-        return Err(Error::string_index_overflow(
-            off_dt_strings,
-            HEADER_LEN,
-            file_index,
-        ));
-    }
     let raw_data_len = (total_size - HEADER_LEN) as usize;
     let ans_ptr = core::ptr::from_raw_parts(ptr as *const (), raw_data_len);
     let device_tree: &DeviceTree = &*ans_ptr;
@@ -125,33 +73,6 @@ where
     let ret = T::deserialize(&mut d)?;
     Ok(ret)
 }
-
-const DEVICE_TREE_MAGIC: u32 = 0xD00DFEED;
-
-const FDT_BEGIN_NODE: u32 = 0x1;
-const FDT_END_NODE: u32 = 0x2;
-const FDT_PROP: u32 = 0x3;
-const FDT_NOP: u32 = 0x4;
-const FDT_END: u32 = 0x9;
-
-const SUPPORTED_VERSION: u32 = 17;
-
-#[derive(Debug, Clone)]
-#[repr(C)]
-struct Header {
-    magic: u32,
-    total_size: u32,
-    off_dt_struct: u32,
-    off_dt_strings: u32,
-    off_mem_rsvmap: u32,
-    version: u32,
-    last_comp_version: u32,
-    boot_cpuid_phys: u32,
-    size_dt_strings: u32,
-    size_dt_struct: u32,
-}
-
-const HEADER_LEN: u32 = core::mem::size_of::<Header>() as u32;
 
 #[derive(Debug)]
 struct DeviceTree {
@@ -195,7 +116,10 @@ impl<'a> Tags<'a> {
     #[inline]
     fn read_cur_u32(&mut self) -> Result<u32> {
         if self.cur >= (u32::MAX - 4) as usize {
-            return Err(Error::u32_index_space_overflow(self.cur as u32, self.file_index()))
+            return Err(Error::u32_index_space_overflow(
+                self.cur as u32,
+                self.file_index(),
+            ));
         }
         let ans = u32::from_be_bytes([
             self.structure[self.cur],
@@ -252,11 +176,11 @@ impl<'a> Tags<'a> {
             }
             cur += 1;
         }
-        return Err(Error::table_string_offset(
+        Err(Error::table_string_offset(
             pos,
             cur as u32,
             self.file_index(),
-        ));
+        ))
     }
 }
 
@@ -272,13 +196,8 @@ impl<'a> Iterator for Tags<'a> {
         }
         let ans = loop {
             match self.read_cur_u32() {
-                Ok(FDT_BEGIN_NODE) => match self.read_string0_align() {
-                    Ok(name) => {
-                        // begin of structure tag
-                        break Some(Ok(Tag::Begin(name)));
-                    }
-                    Err(e) => break Some(Err(e)),
-                },
+                // begin of structure tag
+                Ok(FDT_BEGIN_NODE) => break Some(self.read_string0_align().map(Tag::Begin)),
                 Ok(FDT_PROP) => {
                     let val_size = match self.read_cur_u32() {
                         Ok(v) => v,
@@ -305,7 +224,7 @@ impl<'a> Iterator for Tags<'a> {
                 Ok(FDT_NOP) => self.cur += 4,
                 Ok(FDT_END) => break None,
                 Ok(invalid) => break Some(Err(Error::invalid_tag_id(invalid, self.file_index()))),
-                Err(e) => break Some(Err(e))
+                Err(e) => break Some(Err(e)),
             }
         };
         match ans {
@@ -364,7 +283,7 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer<'de> {
     {
         match self.peek_tag()? {
             Some(Tag::Prop(_, value_slice)) => {
-                if value_slice.len() == 0 {
+                if value_slice.is_empty() {
                     self.deserialize_bool(visitor)
                 } else if value_slice.len() == 4 {
                     self.deserialize_u32(visitor)
@@ -373,7 +292,7 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer<'de> {
                 }
             }
             Some(Tag::Begin(_name_slice)) => self.deserialize_map(visitor),
-            Some(Tag::End) => unreachable!(),
+            Some(Tag::End) => todo!(),
             _ => todo!(),
         }
     }
@@ -384,7 +303,7 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer<'de> {
     {
         match self.peek_tag_index()? {
             Some((Tag::Prop(value_slice, _name_slice), _file_index)) => {
-                if value_slice.len() == 0 {
+                if value_slice.is_empty() {
                     self.eat_tag()?;
                     visitor.visit_bool(true)
                 } else {
@@ -675,7 +594,7 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer<'de> {
                         }
                     }
                 }
-                Tag::End => unreachable!(),
+                Tag::End => todo!(),
                 Tag::Prop(_, _) => self.eat_tag()?,
             }
         }
@@ -708,7 +627,7 @@ impl<'de, 'b> de::MapAccess<'de> for MapVisitor<'de, 'b> {
                 .deserialize(serde::de::value::BorrowedBytesDeserializer::new(name_slice))
                 .map(Some),
             Some(Tag::End) => Ok(None),
-            None => return Err(Error::no_remaining_tags()),
+            None => Err(Error::no_remaining_tags()),
         }
     }
 
@@ -720,7 +639,7 @@ impl<'de, 'b> de::MapAccess<'de> for MapVisitor<'de, 'b> {
             Some(Tag::Prop(_value_slice, _name_slice)) => seed.deserialize(&mut *self.de),
             Some(Tag::Begin(_name_slice)) => seed.deserialize(&mut *self.de),
             Some(Tag::End) => panic!(),
-            None => return Err(Error::no_remaining_tags()),
+            None => Err(Error::no_remaining_tags()),
         }
     }
 }
