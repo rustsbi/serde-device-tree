@@ -44,6 +44,7 @@ fn main() -> Result<(), Error> {
         chosen: Option<Chosen<'a>>,
         cpus: Cpus<'a>,
         memory: NodeSeq<'a>,
+        soc: Soc<'a>,
     }
 
     #[derive(Deserialize)]
@@ -77,6 +78,16 @@ fn main() -> Result<(), Error> {
         reg: Reg<'a>,
     }
 
+    #[derive(Deserialize)]
+    struct Soc<'a> {
+        virtio_mmio: NodeSeq<'a>,
+    }
+
+    #[derive(Deserialize)]
+    struct VirtIoMmio<'a> {
+        reg: Reg<'a>,
+    }
+
     {
         // 解析！
         let t: Tree = from_raw_mut(&dtb).unwrap();
@@ -107,6 +118,12 @@ fn main() -> Result<(), Error> {
                 mem.reg
             );
         }
+
+        for peripheral in t.soc.virtio_mmio.iter() {
+            let virtio_mmio: VirtIoMmio = peripheral.deserialize();
+            println!("virtio_mmio@{}: {:?}", peripheral.at(), virtio_mmio.reg);
+        }
+
         // 解析过程中，设备树的内容被修改了。
         // 因此若要以其他方式再次访问设备树，先将这次解析的结果释放。
         assert_ne!(slice, DEVICE_TREE);

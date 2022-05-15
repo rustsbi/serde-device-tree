@@ -174,7 +174,7 @@ impl GroupCursor {
         let bytes = structure[self.0 + 1].lead_slice(len_name);
         (
             bytes,
-            AnyCursor(self.0 + 1 + align(len_name, BLOCK_LEN), PhantomData),
+            AnyCursor(self.0 + 1 + align(len_name + 1, BLOCK_LEN), PhantomData),
         )
     }
 
