@@ -37,6 +37,7 @@ struct Cpus<'a> {
 #[serde(untagged)]
 enum MaybeCpu<'a> {
     Cpu(Cpu<'a>),
+    #[allow(unused)]
     Bytes(&'a [u8]),
 }
 
