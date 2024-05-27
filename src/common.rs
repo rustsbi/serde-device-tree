@@ -1,4 +1,4 @@
-﻿use crate::Error;
+﻿use crate::error::Error;
 
 #[derive(Debug, Clone)]
 #[repr(C)]

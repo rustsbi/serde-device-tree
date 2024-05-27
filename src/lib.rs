@@ -31,4 +31,4 @@ pub use de::from_raw;
 pub use de_mut::{buildin, from_raw_mut, Dtb, DtbPtr};
 
 #[doc(inline)]
-pub use error::{Error, Result};
+pub use error::Result;

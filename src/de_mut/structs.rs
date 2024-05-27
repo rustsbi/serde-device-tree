@@ -1,6 +1,6 @@
 ﻿use crate::{
     common::{Header, ALIGN},
-    Error as DtError,
+    error::Error as DtError,
 };
 use core::{cell::RefCell, fmt::Display};
 

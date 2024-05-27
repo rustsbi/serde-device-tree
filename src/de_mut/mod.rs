@@ -1,7 +1,7 @@
 ﻿//! Deserialize device tree data to a Rust data structure,
 //! the memory region contains dtb file should be mutable.
 
-use crate::Error as DtError;
+use crate::error::Error as DtError;
 use serde::de;
 
 mod cursor;

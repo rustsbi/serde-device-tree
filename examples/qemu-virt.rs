@@ -12,7 +12,7 @@ use serde_derive::Deserialize;
 // - `StrSeq`: '\0' 分隔的一组字符串，设备树中一种常见的属性类型，这个类型要求可变的内存。
 use serde_device_tree::{
     buildin::{NodeSeq, Reg, StrSeq},
-    from_raw_mut, Dtb, DtbPtr, Error,
+    from_raw_mut, Dtb, DtbPtr, error::Error,
 };
 
 fn main() -> Result<(), Error> {
