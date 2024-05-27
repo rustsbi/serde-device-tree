@@ -23,6 +23,9 @@ pub mod error;
 
 mod common;
 mod de_mut;
+mod value;
+
+pub use value::compatible::Compatible;
 
 #[doc(inline)]
 pub use de::from_raw;

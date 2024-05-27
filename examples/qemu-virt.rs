@@ -1,4 +1,4 @@
-﻿//! 这是一个 `from_raw_mut` 反序列化设备树的示例。不需要 `alloc`。
+//! 这是一个 `from_raw_mut` 反序列化设备树的示例。不需要 `alloc`。
 // extern crate alloc;
 
 // 在实际使用中，将这里的 `serde_derive::Deserialize` 改为 `serde::Deserialize`。
@@ -12,7 +12,8 @@ use serde_derive::Deserialize;
 // - `StrSeq`: '\0' 分隔的一组字符串，设备树中一种常见的属性类型，这个类型要求可变的内存。
 use serde_device_tree::{
     buildin::{NodeSeq, Reg, StrSeq},
-    from_raw_mut, Dtb, DtbPtr, error::Error,
+    error::Error,
+    from_raw_mut, Dtb, DtbPtr,
 };
 
 fn main() -> Result<(), Error> {

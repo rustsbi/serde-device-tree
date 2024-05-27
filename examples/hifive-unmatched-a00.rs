@@ -2,6 +2,7 @@ extern crate alloc;
 
 use alloc::collections::BTreeMap;
 use serde_derive::Deserialize;
+use serde_device_tree::Compatible;
 
 static DEVICE_TREE: &'static [u8] = include_bytes!("hifive-unmatched-a00.dtb");
 
@@ -12,7 +13,7 @@ struct Tree<'a> {
     #[serde(rename = "#size-cells")]
     num_size_cells: u32,
     model: &'a str,
-    compatible: &'a str,
+    compatible: Compatible<'a>,
     chosen: Option<Chosen<'a>>,
     cpus: Cpus<'a>,
 }
@@ -43,7 +44,8 @@ enum MaybeCpu<'a> {
 
 #[derive(Debug, Deserialize)]
 struct Cpu<'a> {
-    compatible: &'a str,
+    #[serde(borrow)]
+    compatible: Compatible<'a>,
 }
 
 fn main() {
@@ -52,7 +54,7 @@ fn main() {
     println!("#address_cells = {}", t.num_address_cells);
     println!("#size_cells = {}", t.num_size_cells);
     println!("model = {}", t.model);
-    println!("compatible = {}", t.compatible);
+    println!("compatible = {:?}", t.compatible);
     if let Some(chosen) = t.chosen {
         if let Some(stdout_path) = chosen.stdout_path {
             println!("stdout = {}", stdout_path);
@@ -64,7 +66,7 @@ fn main() {
     println!("cpu u_boot_dm_spl = {}", t.cpus.u_boot_dm_spl);
     for (cpu_name, cpu) in t.cpus.cpu {
         if let MaybeCpu::Cpu(cpu) = cpu {
-            println!("cpu {}, compaible = {}", cpu_name, cpu.compatible)
+            println!("cpu {}, compaible = {:?}", cpu_name, cpu.compatible)
         }
     }
 }
