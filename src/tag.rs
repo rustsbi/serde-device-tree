@@ -99,6 +99,17 @@ impl<'a> Tags<'a> {
             self.file_index(),
         ))
     }
+    // caller must ensure in FDT_PROP context. returns (val, prop_name).
+    #[inline]
+    fn read_tag_prop(&mut self) -> Result<(&'a [u8], &'a [u8])> {
+        let val_size = self.read_cur_u32()?;
+        let name_offset = self.read_cur_u32()?;
+        // get value slice
+        let val = self.read_slice_align(val_size)?;
+        // lookup name in strings table
+        let prop_name = self.read_table_string(name_offset)?;
+        Ok((val, prop_name))
+    }
 }
 
 impl<'a> Iterator for Tags<'a> {
@@ -114,40 +125,18 @@ impl<'a> Iterator for Tags<'a> {
         let ans = loop {
             match self.read_cur_u32() {
                 // begin of structure tag
-                Ok(FDT_BEGIN_NODE) => break Some(self.read_string0_align().map(Tag::Begin)),
-                Ok(FDT_PROP) => {
-                    let val_size = match self.read_cur_u32() {
-                        Ok(v) => v,
-                        Err(e) => break Some(Err(e)),
-                    };
-                    let name_offset = match self.read_cur_u32() {
-                        Ok(v) => v,
-                        Err(e) => break Some(Err(e)),
-                    };
-                    // get value slice
-                    let val = match self.read_slice_align(val_size) {
-                        Ok(slice) => slice,
-                        Err(e) => break Some(Err(e)),
-                    };
-
-                    // lookup name in strings table
-                    let prop_name = match self.read_table_string(name_offset) {
-                        Ok(slice) => slice,
-                        Err(e) => break Some(Err(e)),
-                    };
-                    break Some(Ok(Tag::Prop(val, prop_name)));
-                }
-                Ok(FDT_END_NODE) => break Some(Ok(Tag::End)),
+                Ok(FDT_BEGIN_NODE) => break self.read_string0_align().map(Tag::Begin),
+                Ok(FDT_PROP) => break self.read_tag_prop().map(|(a, b)| Tag::Prop(a, b)),
+                Ok(FDT_END_NODE) => break Ok(Tag::End),
                 Ok(FDT_NOP) => self.cur += 4,
-                Ok(FDT_END) => break None,
-                Ok(invalid) => break Some(Err(Error::invalid_tag_id(invalid, self.file_index()))),
-                Err(e) => break Some(Err(e)),
+                Ok(FDT_END) => return None,
+                Ok(invalid) => break Err(Error::invalid_tag_id(invalid, self.file_index())),
+                Err(e) => break Err(e),
             }
         };
         match ans {
-            Some(Ok(tag)) => Some(Ok((tag, self.file_index()))),
-            Some(Err(e)) => Some(Err(e)),
-            None => None,
+            Ok(tag) => Some(Ok((tag, self.file_index()))),
+            Err(e) => Some(Err(e)),
         }
     }
 }
