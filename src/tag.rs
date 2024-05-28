@@ -3,10 +3,21 @@ use crate::error::{Error, Result};
 
 #[derive(Debug, Clone)]
 pub struct Tags<'a> {
-    pub(crate) structure: &'a [u8],
-    pub(crate) string_table: &'a [u8],
-    pub(crate) cur: usize,
-    pub(crate) offset_from_file_begin: usize,
+    structure: &'a [u8],
+    string_table: &'a [u8],
+    cur: usize,
+    offset_from_file_begin: usize,
+}
+
+impl<'a> Tags<'a> {
+    pub fn new(structure: &'a [u8], string_table: &'a [u8], offset_from_file_begin: usize) -> Self {
+        Tags {
+            structure,
+            string_table,
+            cur: 0,
+            offset_from_file_begin,
+        }
+    }
 }
 
 #[inline]

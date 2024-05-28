@@ -87,12 +87,11 @@ impl DeviceTree {
         let structure_len = u32::from_be(self.header.size_dt_struct) as usize;
         let strings_addr = (u32::from_be(self.header.off_dt_strings) - HEADER_LEN) as usize;
         let strings_len = u32::from_be(self.header.size_dt_strings) as usize;
-        Tags {
-            structure: &self.data[structure_addr..structure_addr + structure_len],
-            string_table: &self.data[strings_addr..strings_addr + strings_len],
-            cur: 0,
-            offset_from_file_begin: structure_addr,
-        }
+        Tags::new(
+            &self.data[structure_addr..structure_addr + structure_len],
+            &self.data[strings_addr..strings_addr + strings_len],
+            structure_addr,
+        )
     }
 }
 
