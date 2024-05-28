@@ -33,7 +33,7 @@ impl<'de: 'a, 'a> Deserialize<'de> for Compatible<'a> {
             where
                 E: serde::de::Error,
             {
-                // TODO utf-8 check
+                // no UTF-8 checks
                 Ok(Compatible { data: v })
             }
         }
@@ -43,7 +43,14 @@ impl<'de: 'a, 'a> Deserialize<'de> for Compatible<'a> {
 
 impl fmt::Debug for Compatible<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_list().entries(self.iter()).finish()
+        let mut list = f.debug_list();
+        for slice in self.iter() {
+            match core::str::from_utf8(slice) {
+                Ok(string) => list.entry(&string),
+                Err(_error) => list.entry(&slice),
+            };
+        }
+        list.finish()
     }
 }
 
@@ -52,7 +59,7 @@ pub struct Iter<'a> {
 }
 
 impl<'a> Iterator for Iter<'a> {
-    type Item = &'a str;
+    type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.remaining.len() == 0 {
@@ -70,6 +77,6 @@ impl<'a> Iterator for Iter<'a> {
             // skip '\0'
             self.remaining = &rest[1..];
         }
-        Some(core::str::from_utf8(ans).unwrap())
+        Some(ans)
     }
 }
