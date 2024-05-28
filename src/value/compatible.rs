@@ -25,7 +25,7 @@ impl<'de: 'a, 'a> Deserialize<'de> for Compatible<'a> {
         impl<'de: 'a, 'a> Visitor<'de> for StrListVisitor<'de, 'a> {
             type Value = Compatible<'a>;
 
-            fn expecting(&self, formatter: &mut core::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 write!(formatter, "string list")
             }
 

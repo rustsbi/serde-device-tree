@@ -23,6 +23,7 @@ pub mod error;
 
 mod common;
 mod de_mut;
+mod tag;
 mod value;
 
 pub use value::compatible::Compatible;
