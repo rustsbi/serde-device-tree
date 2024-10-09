@@ -7,6 +7,7 @@ use serde::{de, Deserialize};
 /// 在解析前，无法得知这种节点的数量，因此也无法为它们分配足够的空间，
 /// 因此这些节点将延迟解析。
 /// 迭代 `NodeSeq` 可获得一系列 [`NodeSeqItem`]，再调用 `deserialize` 方法分别解析每个节点。
+#[repr(C)]
 pub struct NodeSeq<'de> {
     dtb: RefDtb<'de>,
     cursor: GroupCursor,

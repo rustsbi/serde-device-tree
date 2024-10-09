@@ -2,6 +2,7 @@
 use serde::de;
 
 #[allow(unused)]
+#[repr(C)]
 pub(super) struct GroupDeserializer<'de> {
     pub dtb: RefDtb<'de>,
     pub cursor: GroupCursor,
