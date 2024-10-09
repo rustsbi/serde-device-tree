@@ -9,8 +9,8 @@ use serde::{de, Deserialize};
 /// 迭代 `NodeSeq` 可获得一系列 [`NodeSeqItem`]，再调用 `deserialize` 方法分别解析每个节点。
 pub struct NodeSeq<'de> {
     dtb: RefDtb<'de>,
-    reg: RegConfig,
     cursor: GroupCursor,
+    reg: RegConfig,
     len_item: usize,
     len_name: usize,
 }
