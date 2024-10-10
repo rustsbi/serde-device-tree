@@ -16,10 +16,21 @@ use serde_device_tree::{
     from_raw_mut, Dtb, DtbPtr,
 };
 
+const RAW_DEVICE_TREE: &'static [u8] = include_bytes!("qemu-virt.dtb");
+const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
+
+#[repr(align(4))]
+struct AlignedBuffer {
+    pub data: [u8; RAW_DEVICE_TREE.len()],
+}
+
 fn main() -> Result<(), Error> {
     // 整个设备树二进制文件需要装载到一块可写的内存区域
-    static DEVICE_TREE: &[u8] = include_bytes!("qemu-virt.dtb");
-    let mut slice = DEVICE_TREE.to_vec();
+    let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+        data: [0; BUFFER_SIZE],
+    });
+    aligned_data.data[..BUFFER_SIZE].clone_from_slice(&RAW_DEVICE_TREE);
+    let mut slice = aligned_data.data.to_vec();
     // 这一步验证了设备树首部的正确性，`DtbPtr` 类型可以安全地传递到任何地方，
     // 甚至跨地址空间（如果你知道偏移的话）。
     let ptr = DtbPtr::from_raw(slice.as_mut_ptr())?;
@@ -127,10 +138,10 @@ fn main() -> Result<(), Error> {
 
         // 解析过程中，设备树的内容被修改了。
         // 因此若要以其他方式再次访问设备树，先将这次解析的结果释放。
-        assert_ne!(slice, DEVICE_TREE);
+        assert_ne!(slice, RAW_DEVICE_TREE);
     }
     // 释放后，内存会恢复原状。
-    assert_eq!(slice, DEVICE_TREE);
+    assert_eq!(slice, RAW_DEVICE_TREE);
 
     Ok(())
 }

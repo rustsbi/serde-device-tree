@@ -2,6 +2,7 @@
 use core::marker::PhantomData;
 
 #[derive(Clone, Copy, Debug)]
+#[repr(C)]
 pub(super) struct AnyCursor<T: Type = Body>(usize, PhantomData<T>);
 
 pub(super) type BodyCursor = AnyCursor<Body>;
