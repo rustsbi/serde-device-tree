@@ -6,7 +6,6 @@ use serde::de;
 
 mod cursor;
 mod data;
-mod group;
 mod node_seq;
 mod reg;
 mod str_seq;
@@ -20,7 +19,7 @@ pub mod buildin {
 
 use cursor::{BodyCursor, Cursor, GroupCursor, PropCursor};
 use data::BorrowedValueDeserializer;
-use group::GroupDeserializer;
+use node_seq::NodeSeq;
 use r#struct::StructDeserializer;
 use reg::RegConfig;
 use structs::{RefDtb, StructureBlock, BLOCK_LEN};
@@ -147,7 +146,7 @@ impl<'de, 'b> de::MapAccess<'de> for StructAccess<'de, 'b> {
             }
             Temp::Group(cursor, len_item, len_name) => {
                 // 键是组名字，构造组反序列化器
-                seed.deserialize(&mut GroupDeserializer {
+                seed.deserialize(&mut NodeSeq {
                     dtb: self.de.dtb,
                     cursor,
                     reg: self.de.reg,
