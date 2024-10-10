@@ -22,6 +22,7 @@ pub struct RegRegion(pub Range<usize>);
 
 /// 节点地址空间格式。
 #[derive(Clone, Copy, Debug)]
+#[repr(C)]
 pub(super) struct RegConfig {
     pub address_cells: u32,
     pub size_cells: u32,

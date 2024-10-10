@@ -60,6 +60,9 @@ where
     T: de::Deserialize<'de>,
 {
     // read header
+    if (ptr as usize) & (ALIGN - 1) != 0 {
+        return Err(Error::unaligned(ptr as usize));
+    }
     let header = &*(ptr as *const Header);
     header.verify()?;
 
