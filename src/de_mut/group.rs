@@ -2,6 +2,7 @@
 use serde::de;
 
 #[allow(unused)]
+#[derive(Clone, Copy)]
 pub(super) struct GroupDeserializer<'de> {
     pub dtb: RefDtb<'de>,
     pub cursor: GroupCursor,
