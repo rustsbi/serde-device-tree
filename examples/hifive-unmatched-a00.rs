@@ -46,7 +46,7 @@ struct Cpu<'a> {
     compatible: Compatible<'a>,
 }
 
-const RAW_DEVICE_TREE: &'static [u8] = include_bytes!("hifive-unmatched-a00.dtb");
+const RAW_DEVICE_TREE: &[u8] = include_bytes!("hifive-unmatched-a00.dtb");
 const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
 
 #[repr(align(4))]
@@ -58,7 +58,7 @@ fn main() {
     let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
         data: [0; BUFFER_SIZE],
     });
-    aligned_data.data[..BUFFER_SIZE].clone_from_slice(&RAW_DEVICE_TREE);
+    aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
     let ptr = aligned_data.data.as_ptr();
     let t: Tree = unsafe { serde_device_tree::from_raw(ptr) }.unwrap();
     println!("#address_cells = {}", t.num_address_cells);

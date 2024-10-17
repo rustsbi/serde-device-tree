@@ -35,7 +35,7 @@ impl RegConfig {
     };
 }
 
-impl<'de, 'b> Deserialize<'de> for Reg<'b> {
+impl<'de> Deserialize<'de> for Reg<'_> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,

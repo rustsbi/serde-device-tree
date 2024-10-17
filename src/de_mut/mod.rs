@@ -7,6 +7,7 @@ use serde::de;
 mod cursor;
 mod data;
 mod group;
+mod node;
 mod node_seq;
 mod reg;
 mod str_seq;
@@ -15,12 +16,13 @@ mod structs;
 
 pub use structs::{Dtb, DtbPtr};
 pub mod buildin {
-    pub use super::{node_seq::NodeSeq, reg::Reg, str_seq::StrSeq};
+    pub use super::{node::Node, node_seq::NodeSeq, reg::Reg, str_seq::StrSeq};
 }
 
 use cursor::{BodyCursor, Cursor, GroupCursor, PropCursor};
 use data::BorrowedValueDeserializer;
 use group::GroupDeserializer;
+// use node::NodeDeserializer;
 use r#struct::StructDeserializer;
 use reg::RegConfig;
 use structs::{RefDtb, StructureBlock, BLOCK_LEN};
@@ -64,12 +66,12 @@ struct StructAccess<'de, 'b> {
 /// 解析键（名字）时将确定值类型，保存 `Temp` 类型的状态。
 /// 根据状态分发值解析器。
 enum Temp {
-    Node,
+    Node(BodyCursor),
     Group(GroupCursor, usize, usize),
     Prop(PropCursor),
 }
 
-impl<'de, 'b> de::MapAccess<'de> for StructAccess<'de, 'b> {
+impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
     type Error = DtError;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
@@ -80,17 +82,17 @@ impl<'de, 'b> de::MapAccess<'de> for StructAccess<'de, 'b> {
             match self.de.move_next() {
                 // 子节点名字
                 Cursor::Title(c) => {
-                    let (name, sub) = c.split_on(self.de.dtb);
+                    let (name, _) = c.split_on(self.de.dtb);
 
                     let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
                     // 子节点名字不带 @
                     if pre_len == name.as_bytes().len() {
-                        self.de.cursor = sub;
+                        let (node, next) = c.take_node_on(self.de.dtb, name);
+                        self.de.cursor = next;
                         if self.fields.contains(&name) {
-                            self.temp = Temp::Node;
+                            self.temp = Temp::Node(node);
                             break name;
                         }
-                        self.de.escape();
                     }
                     // @ 之前的部分是真正的名字，用这个名字搜索连续的一组
                     else {
@@ -138,12 +140,13 @@ impl<'de, 'b> de::MapAccess<'de> for StructAccess<'de, 'b> {
         V: de::DeserializeSeed<'de>,
     {
         match self.temp {
-            Temp::Node => {
+            Temp::Node(cursor) => {
                 // 键是独立节点名字，递归
-                let mut child = self.de.clone();
-                let res = seed.deserialize(&mut child)?;
-                self.de.cursor = child.cursor;
-                Ok(res)
+                seed.deserialize(&mut StructDeserializer {
+                    dtb: self.de.dtb,
+                    cursor,
+                    reg: self.de.reg,
+                })
             }
             Temp::Group(cursor, len_item, len_name) => {
                 // 键是组名字，构造组反序列化器

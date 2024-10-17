@@ -62,7 +62,7 @@ impl<'a> Iterator for Iter<'a> {
     type Item = &'a [u8];
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining.len() == 0 {
+        if self.remaining.is_empty() {
             return None;
         }
         let mut idx = 0;
