@@ -132,14 +132,14 @@ fn main() -> Result<(), Error> {
             );
         }
 
-        for current_node in t.soc.node_iter().unwrap() {
+        for current_node in t.soc.nodes().unwrap() {
             if current_node.get_split_name().0 == "virtio_mmio" {
                 let mmio = current_node.deserialize::<VirtIoMmio>();
                 println!("{:?} {:?}", current_node.get_split_name(), mmio.reg);
             }
         }
-        for current_node in t.soc.prop_iter().unwrap() {
-            println!("{}", current_node.get_name());
+        for current_prop in t.soc.props().unwrap() {
+            println!("{}", current_prop.get_name());
         }
 
         // 解析过程中，设备树的内容被修改了。

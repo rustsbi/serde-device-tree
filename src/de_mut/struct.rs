@@ -157,23 +157,13 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut StructDeserializer<'de> {
 
     fn deserialize_newtype_struct<V>(
         self,
-        name: &'static str,
+        _name: &'static str,
         visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        if name == "Node" {
-            visitor.visit_borrowed_bytes(unsafe {
-                // TODO: try remove copy from parts
-                core::slice::from_raw_parts(
-                    self as *const _ as *const u8,
-                    core::mem::size_of::<StructDeserializer<'_>>(),
-                )
-            })
-        } else {
-            visitor.visit_newtype_struct(self)
-        }
+        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, _visitor: V) -> Result<V::Value, Self::Error>

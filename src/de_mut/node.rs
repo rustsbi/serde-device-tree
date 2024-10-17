@@ -1,4 +1,7 @@
-﻿use super::{BodyCursor, Cursor, PropCursor, RefDtb, RegConfig, StructDeserializer};
+﻿use super::{
+    BodyCursor, BorrowedValueDeserializer, Cursor, PropCursor, RefDtb, RegConfig,
+    StructDeserializer,
+};
 use core::marker::PhantomData;
 use serde::{de, Deserialize};
 
@@ -44,8 +47,10 @@ pub struct PropItem<'de> {
 }
 
 impl<'de> Node<'de> {
-    pub unsafe fn covnert_from_struct_deseriallizer_pointer(ptr: *const u8) -> Self {
-        let struct_deseriallizer = unsafe { &*(ptr as *const StructDeserializer) };
+    unsafe fn covnert_from_struct_deseriallizer_pointer(
+        ptr: *const &StructDeserializer<'de>,
+    ) -> Self {
+        let struct_deseriallizer = &*(ptr);
         println!("get node from {:?}", struct_deseriallizer.cursor);
         let dtb = struct_deseriallizer.dtb;
         let mut cursor = struct_deseriallizer.cursor;
@@ -83,7 +88,7 @@ impl<'de> Node<'de> {
         }
     }
     /// 获得节点迭代器。
-    pub const fn node_iter<'b>(&'b self) -> Option<NodeIter<'de, 'b>> {
+    pub const fn nodes<'b>(&'b self) -> Option<NodeIter<'de, 'b>> {
         match self.nodes_start {
             None => None,
             Some(node_cursor) => Some(NodeIter {
@@ -95,7 +100,7 @@ impl<'de> Node<'de> {
     }
 
     /// 获得属性迭代器。
-    pub const fn prop_iter<'b>(&'b self) -> Option<PropIter<'de, 'b>> {
+    pub const fn props<'b>(&'b self) -> Option<PropIter<'de, 'b>> {
         match self.nodes_start {
             None => None,
             Some(node_cursor) => Some(PropIter {
@@ -165,24 +170,19 @@ impl<'de, 'b> Deserialize<'de> for Node<'b> {
             type Value = Node<'b>;
 
             fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(formatter, "struct StrSeq")
+                write!(formatter, "struct Node")
             }
 
-            fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+            fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
             where
-                E: de::Error,
+                D: de::Deserializer<'de>,
             {
-                // 结构体转为内存切片，然后拷贝过来
-                if v.len() == core::mem::size_of::<StructDeserializer>() {
-                    Ok(unsafe {
-                        Self::Value::covnert_from_struct_deseriallizer_pointer(v.as_ptr())
-                    })
-                } else {
-                    Err(E::invalid_length(
-                        v.len(),
-                        &"`Node` is copied with wrong size.",
-                    ))
-                }
+                Ok(unsafe {
+                    Node::covnert_from_struct_deseriallizer_pointer(core::ptr::addr_of!(
+                        deserializer
+                    )
+                        as *const &StructDeserializer)
+                })
             }
         }
 
@@ -229,5 +229,13 @@ impl<'de> NodeItem<'de> {
 impl<'de> PropItem<'de> {
     pub fn get_name(&self) -> &str {
         self.name
+    }
+    pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
+        T::deserialize(&mut BorrowedValueDeserializer {
+            dtb: self.dtb,
+            reg: self.reg,
+            cursor: self.prop,
+        })
+        .unwrap()
     }
 }
