@@ -132,14 +132,12 @@ fn main() -> Result<(), Error> {
             );
         }
 
+        println!("{:?}", t.soc);
         for current_node in t.soc.nodes().unwrap() {
             if current_node.get_parsed_name().0 == "virtio_mmio" {
                 let mmio = current_node.deserialize::<VirtIoMmio>();
                 println!("{:?} {:?}", current_node.get_parsed_name(), mmio.reg);
             }
-        }
-        for current_prop in t.soc.props().unwrap() {
-            println!("{}", current_prop.get_name());
         }
 
         // 解析过程中，设备树的内容被修改了。

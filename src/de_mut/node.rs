@@ -2,6 +2,7 @@
     BodyCursor, BorrowedValueDeserializer, Cursor, PropCursor, RefDtb, RegConfig,
     StructDeserializer,
 };
+use core::fmt::Debug;
 use core::marker::PhantomData;
 use serde::{de, Deserialize};
 
@@ -103,7 +104,7 @@ impl<'de> Node<'de> {
 
     /// 获得属性迭代器。
     pub const fn props<'b>(&'b self) -> Option<PropIter<'de, 'b>> {
-        match self.nodes_start {
+        match self.props_start {
             None => None,
             Some(node_cursor) => Some(PropIter {
                 node: self,
@@ -111,6 +112,42 @@ impl<'de> Node<'de> {
                 i: 0,
             }),
         }
+    }
+}
+
+impl Debug for Node<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let props = self.props();
+        write!(f, "Props: [")?;
+        if let Some(s) = props {
+            let mut first_written = true;
+            for prop in s {
+                if first_written {
+                    write!(f, "\"{}\"", prop.get_name())?;
+                    first_written = false;
+                } else {
+                    write!(f, ",\"{}\"", prop.get_name())?;
+                }
+            }
+        }
+        write!(f, "]\n")?;
+
+        let children = self.nodes();
+        write!(f, "Children: [")?;
+        if let Some(s) = children {
+            let mut first_written = true;
+            for child in s {
+                if first_written {
+                    write!(f, "\"{}\"", child.get_full_name())?;
+                    first_written = false;
+                } else {
+                    write!(f, ",\"{}\"", child.get_full_name())?;
+                }
+            }
+        }
+        write!(f, "]\n")?;
+
+        Ok(())
     }
 }
 
