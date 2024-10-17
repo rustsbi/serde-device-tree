@@ -133,9 +133,9 @@ fn main() -> Result<(), Error> {
         }
 
         for current_node in t.soc.nodes().unwrap() {
-            if current_node.get_split_name().0 == "virtio_mmio" {
+            if current_node.get_parsed_name().0 == "virtio_mmio" {
                 let mmio = current_node.deserialize::<VirtIoMmio>();
-                println!("{:?} {:?}", current_node.get_split_name(), mmio.reg);
+                println!("{:?} {:?}", current_node.get_parsed_name(), mmio.reg);
             }
         }
         for current_prop in t.soc.props().unwrap() {

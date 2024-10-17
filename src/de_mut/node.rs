@@ -56,6 +56,8 @@ impl<'de> Node<'de> {
         let mut cursor = struct_deseriallizer.cursor;
         let mut prop: Option<BodyCursor> = None;
         let mut node: Option<BodyCursor> = None;
+        // TODO: 这里采用朴素的方式遍历块，可能会和 GroupCursor 带来的缓存冲突。
+        // 可能需要一个更优雅的缓存方案或者放弃缓存。
         loop {
             match cursor.move_on(dtb) {
                 Cursor::Title(c) => {
@@ -208,17 +210,21 @@ impl<'de> NodeItem<'de> {
         .unwrap()
     }
 
-    pub fn get_split_name(&self) -> (&str, &str) {
-        let pre_len = self
-            .name
-            .as_bytes()
-            .iter()
-            .take_while(|b| **b != b'@')
-            .count();
-        let mut res = self.name.split_at(pre_len);
-        // Remove @ prefix
-        res.1 = res.1.split_at(1).1;
-        res
+    pub fn get_parsed_name(&self) -> (&str, Option<&str>) {
+        if let Some(_) = self.name.find("@") {
+            let pre_len = self
+                .name
+                .as_bytes()
+                .iter()
+                .take_while(|b| **b != b'@')
+                .count();
+            let (node_name, raw_unit_address) = self.name.split_at(pre_len);
+            // Remove @ prefix
+            let unit_address = raw_unit_address.split_at(1).1;
+            (node_name, Some(unit_address))
+        } else {
+            (self.name, None)
+        }
     }
 
     pub fn get_full_name(&self) -> &str {
