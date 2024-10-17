@@ -339,5 +339,5 @@ impl Cursor {
 
 #[inline]
 const fn align(len: usize, align: usize) -> usize {
-    (len + align - 1) / align
+    len.div_ceil(align)
 }

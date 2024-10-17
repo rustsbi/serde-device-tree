@@ -8,7 +8,7 @@ pub(super) struct StructDeserializer<'de> {
     pub cursor: BodyCursor,
 }
 
-impl<'de, 'b> de::Deserializer<'de> for &'b mut StructDeserializer<'de> {
+impl<'de> de::Deserializer<'de> for &mut StructDeserializer<'de> {
     type Error = DtError;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>

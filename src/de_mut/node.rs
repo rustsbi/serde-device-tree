@@ -64,14 +64,14 @@ impl<'de> Node<'de> {
                 Cursor::Title(c) => {
                     let (name, _) = c.split_on(dtb);
                     let (_, next) = c.take_node_on(dtb, name);
-                    if let None = node {
+                    if node.is_none() {
                         node = Some(cursor)
                     }
                     cursor = next;
                 }
                 Cursor::Prop(c) => {
                     let (_, next) = c.name_on(dtb);
-                    if let None = prop {
+                    if prop.is_none() {
                         prop = Some(cursor)
                     }
                     cursor = next;
@@ -130,7 +130,7 @@ impl Debug for Node<'_> {
                 }
             }
         }
-        write!(f, "]\n")?;
+        writeln!(f, "]")?;
 
         let children = self.nodes();
         write!(f, "Children: [")?;
@@ -145,13 +145,13 @@ impl Debug for Node<'_> {
                 }
             }
         }
-        write!(f, "]\n")?;
+        writeln!(f, "]")?;
 
         Ok(())
     }
 }
 
-impl<'de, 'b> Iterator for NodeIter<'de, 'b> {
+impl<'de> Iterator for NodeIter<'de, '_> {
     type Item = NodeItem<'de>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -174,7 +174,7 @@ impl<'de, 'b> Iterator for NodeIter<'de, 'b> {
     }
 }
 
-impl<'de, 'b> Iterator for PropIter<'de, 'b> {
+impl<'de> Iterator for PropIter<'de, '_> {
     type Item = PropItem<'de>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -196,7 +196,7 @@ impl<'de, 'b> Iterator for PropIter<'de, 'b> {
     }
 }
 
-impl<'de, 'b> Deserialize<'de> for Node<'b> {
+impl<'de> Deserialize<'de> for Node<'_> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -248,7 +248,7 @@ impl<'de> NodeItem<'de> {
     }
 
     pub fn get_parsed_name(&self) -> (&str, Option<&str>) {
-        if let Some(_) = self.name.find("@") {
+        if self.name.contains("@") {
             let pre_len = self
                 .name
                 .as_bytes()

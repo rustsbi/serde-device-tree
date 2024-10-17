@@ -7,7 +7,7 @@ pub(super) struct BorrowedValueDeserializer<'de> {
     pub cursor: PropCursor,
 }
 
-impl<'de, 'b> de::Deserializer<'de> for &'b mut BorrowedValueDeserializer<'de> {
+impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
     type Error = DtError;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>

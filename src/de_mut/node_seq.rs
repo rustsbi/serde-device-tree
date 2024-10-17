@@ -27,7 +27,7 @@ pub struct NodeSeqItem<'de> {
     at: &'de str,
 }
 
-impl<'de, 'b> Deserialize<'de> for NodeSeq<'b> {
+impl<'de> Deserialize<'de> for NodeSeq<'_> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -75,7 +75,7 @@ impl<'de> NodeSeq<'de> {
         // 直接从指针拷贝
         let original_inner = unsafe { &*(ptr as *const GroupDeserializer<'_>) };
         let res = Self {
-            inner: original_inner.clone(),
+            inner: *original_inner,
         };
         // 初始化
         res.inner
@@ -127,7 +127,7 @@ impl Drop for NodeSeq<'_> {
     }
 }
 
-impl<'de, 'b> Iterator for NodeSeqIter<'de, 'b> {
+impl<'de> Iterator for NodeSeqIter<'de, '_> {
     type Item = NodeSeqItem<'de>;
 
     fn next(&mut self) -> Option<Self::Item> {

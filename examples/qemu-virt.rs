@@ -16,7 +16,7 @@ use serde_device_tree::{
     from_raw_mut, Dtb, DtbPtr,
 };
 
-const RAW_DEVICE_TREE: &'static [u8] = include_bytes!("qemu-virt.dtb");
+const RAW_DEVICE_TREE: &[u8] = include_bytes!("qemu-virt.dtb");
 const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
 
 #[repr(align(4))]
@@ -29,7 +29,7 @@ fn main() -> Result<(), Error> {
     let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
         data: [0; BUFFER_SIZE],
     });
-    aligned_data.data[..BUFFER_SIZE].clone_from_slice(&RAW_DEVICE_TREE);
+    aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
     let mut slice = aligned_data.data.to_vec();
     // 这一步验证了设备树首部的正确性，`DtbPtr` 类型可以安全地传递到任何地方，
     // 甚至跨地址空间（如果你知道偏移的话）。

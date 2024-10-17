@@ -71,7 +71,7 @@ enum Temp {
     Prop(PropCursor),
 }
 
-impl<'de, 'b> de::MapAccess<'de> for StructAccess<'de, 'b> {
+impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
     type Error = DtError;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
