@@ -76,7 +76,8 @@ impl<'de> NodeSeq<'de> {
         let original_inner = unsafe { &*(ptr as *const GroupDeserializer<'_>) };
         let res = Self {
             inner: original_inner.clone(),
-        }; // 初始化
+        };
+        // 初始化
         res.inner
             .cursor
             .init_on(res.inner.dtb, res.inner.len_item, res.inner.len_name);

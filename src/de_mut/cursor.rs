@@ -26,6 +26,12 @@ impl Type for Title {}
 impl Type for Group {}
 impl Type for Prop {}
 
+pub enum MoveResult {
+    In,
+    Out,
+    Others,
+}
+
 impl<T: Type> AnyCursor<T> {
     /// 移动 `n` 格。
     pub fn step_n(&mut self, len: usize) {
@@ -71,39 +77,53 @@ impl BodyCursor {
         }
         todo!()
     }
+    /// 移动指针至下一块
+    pub fn move_next(&mut self, dtb: RefDtb) -> MoveResult {
+        use StructureBlock as B;
+        let structure = &dtb.borrow().structure;
+        match structure[self.0] {
+            // 下陷一级
+            B::NODE_BEGIN => {
+                self.0 += 1;
+                self.skip_str_on(dtb);
+                MoveResult::In
+            }
+            // 上浮一级
+            B::NODE_END => {
+                self.0 += 1;
+                MoveResult::Out
+            }
+            // 属性项
+            B::PROP => {
+                if let [_, len_data, _, ..] = &structure[self.0..] {
+                    self.0 += 3 + align(len_data.as_usize(), BLOCK_LEN);
+                } else {
+                    todo!()
+                }
+                MoveResult::Others
+            }
+            // 空白项
+            B::NOP => {
+                self.0 += 1;
+                MoveResult::Others
+            }
+            _ => todo!(),
+        }
+    }
 
     /// 离开当前子树。
     pub fn escape_from(&mut self, dtb: RefDtb) {
-        use StructureBlock as B;
-        let structure = &dtb.borrow().structure;
         let mut level = 1;
         loop {
-            match structure[self.0] {
-                // 下陷一级
-                B::NODE_BEGIN => {
-                    self.0 += 1;
-                    self.skip_str_on(dtb);
-                    level += 1;
-                }
-                // 上浮一级
-                B::NODE_END => {
-                    self.0 += 1;
+            match self.move_next(dtb) {
+                MoveResult::In => level += 1,
+                MoveResult::Out => {
                     if level == 1 {
                         break;
                     }
                     level -= 1;
                 }
-                // 属性项
-                B::PROP => {
-                    if let [_, len_data, _, ..] = &structure[self.0..] {
-                        self.0 += 3 + align(len_data.as_usize(), BLOCK_LEN);
-                    } else {
-                        todo!()
-                    }
-                }
-                // 空白项
-                B::NOP => self.0 += 1,
-                _ => todo!(),
+                _ => {}
             }
         }
     }
@@ -131,7 +151,7 @@ impl TitleCursor {
     /// 生成组光标。
     pub fn take_group_on(&self, dtb: RefDtb, name: &str) -> (GroupCursor, usize, BodyCursor) {
         let name_bytes = name.as_bytes();
-        let name_skip = align(name_bytes.len(), BLOCK_LEN);
+        let name_skip = align(name_bytes.len() + 1, BLOCK_LEN);
         let group = AnyCursor::<Group>(self.0, PhantomData);
 
         let mut body = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
@@ -159,6 +179,18 @@ impl TitleCursor {
             break;
         }
         (group, len, body)
+    }
+
+    /// 生成节点光标。
+    pub fn take_node_on(&self, dtb: RefDtb, name: &str) -> (BodyCursor, BodyCursor) {
+        let name_bytes = name.as_bytes();
+        let name_skip = align(name_bytes.len() + 1, BLOCK_LEN);
+        let node = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
+
+        let mut body = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
+
+        body.escape_from(dtb);
+        (node, body)
     }
 }
 
@@ -281,6 +313,7 @@ impl PropCursor {
     }
 }
 
+#[derive(Debug)]
 pub(super) enum Cursor {
     Title(TitleCursor),
     Prop(PropCursor),
