@@ -90,6 +90,7 @@ impl<'de> Node<'de> {
             nodes_start: node,
         }
     }
+
     /// 获得节点迭代器。
     pub const fn nodes<'b>(&'b self) -> Option<NodeIter<'de, 'b>> {
         match self.nodes_start {
