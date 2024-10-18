@@ -11,12 +11,12 @@ use serde_derive::Deserialize;
 // - `NodeSeq`: name@... 区分的一组同级同类的连续节点，这个类型要求可变的内存。
 // - `StrSeq`: '\0' 分隔的一组字符串，设备树中一种常见的属性类型，这个类型要求可变的内存。
 use serde_device_tree::{
-    buildin::{NodeSeq, Reg, StrSeq},
+    buildin::{Node, NodeSeq, Reg, StrSeq},
     error::Error,
     from_raw_mut, Dtb, DtbPtr,
 };
 
-const RAW_DEVICE_TREE: &'static [u8] = include_bytes!("qemu-virt.dtb");
+const RAW_DEVICE_TREE: &[u8] = include_bytes!("qemu-virt.dtb");
 const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
 
 #[repr(align(4))]
@@ -29,7 +29,7 @@ fn main() -> Result<(), Error> {
     let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
         data: [0; BUFFER_SIZE],
     });
-    aligned_data.data[..BUFFER_SIZE].clone_from_slice(&RAW_DEVICE_TREE);
+    aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
     let mut slice = aligned_data.data.to_vec();
     // 这一步验证了设备树首部的正确性，`DtbPtr` 类型可以安全地传递到任何地方，
     // 甚至跨地址空间（如果你知道偏移的话）。
@@ -56,7 +56,7 @@ fn main() -> Result<(), Error> {
         chosen: Option<Chosen<'a>>,
         cpus: Cpus<'a>,
         memory: NodeSeq<'a>,
-        soc: Soc<'a>,
+        soc: Node<'a>,
     }
 
     #[derive(Deserialize)]
@@ -90,6 +90,7 @@ fn main() -> Result<(), Error> {
         reg: Reg<'a>,
     }
 
+    #[allow(dead_code)]
     #[derive(Deserialize)]
     struct Soc<'a> {
         virtio_mmio: NodeSeq<'a>,
@@ -131,9 +132,12 @@ fn main() -> Result<(), Error> {
             );
         }
 
-        for peripheral in t.soc.virtio_mmio.iter() {
-            let virtio_mmio: VirtIoMmio = peripheral.deserialize();
-            println!("virtio_mmio@{}: {:?}", peripheral.at(), virtio_mmio.reg);
+        println!("{:?}", t.soc);
+        for current_node in t.soc.nodes().unwrap() {
+            if current_node.get_parsed_name().0 == "virtio_mmio" {
+                let mmio = current_node.deserialize::<VirtIoMmio>();
+                println!("{:?} {:?}", current_node.get_parsed_name(), mmio.reg);
+            }
         }
 
         // 解析过程中，设备树的内容被修改了。

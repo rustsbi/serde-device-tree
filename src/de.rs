@@ -130,7 +130,7 @@ impl<'a> Deserializer<'a> {
     }
 }
 
-impl<'de, 'b> de::Deserializer<'de> for &'b mut Deserializer<'de> {
+impl<'de> de::Deserializer<'de> for &mut Deserializer<'de> {
     type Error = Error;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
@@ -468,7 +468,7 @@ impl<'de, 'b> MapVisitor<'de, 'b> {
     }
 }
 
-impl<'de, 'b> de::MapAccess<'de> for MapVisitor<'de, 'b> {
+impl<'de> de::MapAccess<'de> for MapVisitor<'de, '_> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
@@ -512,7 +512,7 @@ mod tests {
     #[cfg(any(feature = "std", feature = "alloc"))]
     #[test]
     fn error_invalid_magic() {
-        static DEVICE_TREE: &'static [u8] = &[0x11, 0x22, 0x33, 0x44]; // not device tree blob format
+        static DEVICE_TREE: &[u8] = &[0x11, 0x22, 0x33, 0x44]; // not device tree blob format
         let ptr = DEVICE_TREE.as_ptr();
 
         #[derive(Debug, Deserialize)]

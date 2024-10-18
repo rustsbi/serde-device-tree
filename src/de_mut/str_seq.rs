@@ -26,7 +26,7 @@ pub struct StrSeqIter<'de> {
     data: &'de [u8],
 }
 
-impl<'de, 'b> Deserialize<'de> for StrSeq<'b> {
+impl<'de> Deserialize<'de> for StrSeq<'_> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,

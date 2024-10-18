@@ -11,7 +11,7 @@ pub(super) struct GroupDeserializer<'de> {
     pub len_name: usize,
 }
 
-impl<'de, 'b> de::Deserializer<'de> for &'b mut GroupDeserializer<'de> {
+impl<'de> de::Deserializer<'de> for &mut GroupDeserializer<'de> {
     type Error = DtError;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>

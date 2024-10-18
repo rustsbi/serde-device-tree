@@ -8,7 +8,7 @@ pub(super) struct StructDeserializer<'de> {
     pub cursor: BodyCursor,
 }
 
-impl<'de, 'b> de::Deserializer<'de> for &'b mut StructDeserializer<'de> {
+impl<'de> de::Deserializer<'de> for &mut StructDeserializer<'de> {
     type Error = DtError;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -158,12 +158,12 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut StructDeserializer<'de> {
     fn deserialize_newtype_struct<V>(
         self,
         _name: &'static str,
-        _visitor: V,
+        visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        todo!("newtype_struct")
+        visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -210,7 +210,7 @@ impl<'de, 'b> de::Deserializer<'de> for &'b mut StructDeserializer<'de> {
     {
         visitor.visit_map(StructAccess {
             fields,
-            temp: Temp::Node,
+            temp: Temp::Node(self.cursor),
             de: self,
         })
     }
@@ -246,10 +246,5 @@ impl StructDeserializer<'_> {
     #[inline]
     pub fn move_next(&mut self) -> Cursor {
         self.cursor.move_on(self.dtb)
-    }
-
-    #[inline]
-    pub fn escape(&mut self) {
-        self.cursor.escape_from(self.dtb);
     }
 }
