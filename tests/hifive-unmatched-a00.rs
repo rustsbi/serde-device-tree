@@ -51,7 +51,7 @@ fn hifive_unmatched() {
         if let Some(stdout_path) = chosen.stdout_path {
             assert_eq!(stdout_path, "serial0\0");
         } else {
-            assert!(false, "Failed to find chosen/stdout_path");
+            panic!("Failed to find chosen/stdout_path");
         }
     }
     assert_eq!(t.cpus.timebase_frequency, 1000000);
