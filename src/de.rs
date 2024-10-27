@@ -31,8 +31,17 @@ use serde::de;
 /// # Example
 ///
 /// ```
-/// # static DEVICE_TREE: &'static [u8] = include_bytes!("../examples/hifive-unmatched-a00.dtb");
-/// # let dtb_pa = DEVICE_TREE.as_ptr() as usize;
+/// # static RAW_DEVICE_TREE: &'static [u8] = include_bytes!("../examples/hifive-unmatched-a00.dtb");
+/// # const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
+/// # #[repr(align(4))]
+/// # struct AlignedBuffer {
+/// #     pub data: [u8; RAW_DEVICE_TREE.len()],
+/// # }
+/// # let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+/// #     data: [0; BUFFER_SIZE],
+/// # });
+/// # aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
+/// # let fdt_ptr = aligned_data.data.as_ptr();
 /// use serde_derive::Deserialize;
 ///
 /// #[derive(Debug, Deserialize)]
@@ -47,7 +56,7 @@ use serde::de;
 ///     stdout_path: Option<&'a str>,
 /// }
 ///
-/// let tree: Tree = unsafe { serde_device_tree::from_raw(dtb_pa as *const u8) }
+/// let tree: Tree = unsafe { serde_device_tree::from_raw(fdt_ptr as *const u8) }
 ///     .expect("parse device tree");
 /// if let Some(chosen) = tree.chosen {
 ///     if let Some(stdout_path) = chosen.stdout_path {
@@ -68,7 +77,7 @@ where
 
     let total_size = u32::from_be(header.total_size);
     let raw_data_len = (total_size - HEADER_LEN) as usize;
-    let ans_ptr = core::ptr::from_raw_parts(ptr as *const (), raw_data_len);
+    let ans_ptr = core::ptr::from_raw_parts(ptr as *const u8, raw_data_len);
     let device_tree: &DeviceTree = &*ans_ptr;
     let tags = device_tree.tags();
     let mut d = Deserializer {
@@ -513,7 +522,16 @@ mod tests {
     #[test]
     fn error_invalid_magic() {
         static DEVICE_TREE: &[u8] = &[0x11, 0x22, 0x33, 0x44]; // not device tree blob format
-        let ptr = DEVICE_TREE.as_ptr();
+        const DEVICE_TREE_LEN: usize = DEVICE_TREE.len();
+        #[repr(align(8))]
+        struct AlignedBuffer {
+            pub data: [u8; DEVICE_TREE_LEN],
+        }
+        let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+            data: [0; DEVICE_TREE_LEN],
+        });
+        aligned_data.data[..DEVICE_TREE_LEN].clone_from_slice(DEVICE_TREE);
+        let ptr = aligned_data.data.as_ptr();
 
         #[derive(Debug, Deserialize)]
         struct Tree {}

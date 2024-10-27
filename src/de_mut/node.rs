@@ -52,7 +52,6 @@ impl<'de> Node<'de> {
         ptr: *const &StructDeserializer<'de>,
     ) -> Self {
         let struct_deseriallizer = &*(ptr);
-        println!("get node from {:?}", struct_deseriallizer.cursor);
         let dtb = struct_deseriallizer.dtb;
         let mut cursor = struct_deseriallizer.cursor;
         let mut prop: Option<BodyCursor> = None;
