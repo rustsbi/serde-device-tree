@@ -77,7 +77,7 @@ where
 
     let total_size = u32::from_be(header.total_size);
     let raw_data_len = (total_size - HEADER_LEN) as usize;
-    let ans_ptr = core::ptr::from_raw_parts(ptr as *const (), raw_data_len);
+    let ans_ptr = core::ptr::from_raw_parts(ptr as *const u8, raw_data_len);
     let device_tree: &DeviceTree = &*ans_ptr;
     let tags = device_tree.tags();
     let mut d = Deserializer {
@@ -522,7 +522,16 @@ mod tests {
     #[test]
     fn error_invalid_magic() {
         static DEVICE_TREE: &[u8] = &[0x11, 0x22, 0x33, 0x44]; // not device tree blob format
-        let ptr = DEVICE_TREE.as_ptr();
+        const DEVICE_TREE_LEN: usize = DEVICE_TREE.len();
+        #[repr(align(8))]
+        struct AlignedBuffer {
+            pub data: [u8; DEVICE_TREE_LEN],
+        }
+        let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+            data: [0; DEVICE_TREE_LEN],
+        });
+        aligned_data.data[..DEVICE_TREE_LEN].clone_from_slice(DEVICE_TREE);
+        let ptr = aligned_data.data.as_ptr();
 
         #[derive(Debug, Deserialize)]
         struct Tree {}

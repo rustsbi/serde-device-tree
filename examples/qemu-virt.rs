@@ -19,7 +19,7 @@ use serde_device_tree::{
 const RAW_DEVICE_TREE: &[u8] = include_bytes!("qemu-virt.dtb");
 const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
 
-#[repr(align(4))]
+#[repr(align(8))]
 struct AlignedBuffer {
     pub data: [u8; RAW_DEVICE_TREE.len()],
 }
