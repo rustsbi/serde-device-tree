@@ -31,8 +31,17 @@ use serde::de;
 /// # Example
 ///
 /// ```
-/// # static DEVICE_TREE: &'static [u8] = include_bytes!("../examples/hifive-unmatched-a00.dtb");
-/// # let dtb_pa = DEVICE_TREE.as_ptr() as usize;
+/// # static RAW_DEVICE_TREE: &'static [u8] = include_bytes!("../examples/hifive-unmatched-a00.dtb");
+/// # const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
+/// # #[repr(align(4))]
+/// # struct AlignedBuffer {
+/// #     pub data: [u8; RAW_DEVICE_TREE.len()],
+/// # }
+/// # let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+/// #     data: [0; BUFFER_SIZE],
+/// # });
+/// # aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
+/// # let fdt_ptr = aligned_data.data.as_ptr();
 /// use serde_derive::Deserialize;
 ///
 /// #[derive(Debug, Deserialize)]
@@ -47,7 +56,7 @@ use serde::de;
 ///     stdout_path: Option<&'a str>,
 /// }
 ///
-/// let tree: Tree = unsafe { serde_device_tree::from_raw(dtb_pa as *const u8) }
+/// let tree: Tree = unsafe { serde_device_tree::from_raw(fdt_ptr as *const u8) }
 ///     .expect("parse device tree");
 /// if let Some(chosen) = tree.chosen {
 ///     if let Some(stdout_path) = chosen.stdout_path {
