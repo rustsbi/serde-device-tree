@@ -51,7 +51,7 @@ impl<'de> Node<'de> {
     unsafe fn covnert_from_struct_deseriallizer_pointer(
         ptr: *const &StructDeserializer<'de>,
     ) -> Self {
-        let struct_deseriallizer = &*(ptr);
+        let struct_deseriallizer = &mut *(ptr as *mut &mut StructDeserializer<'de>);
         let dtb = struct_deseriallizer.dtb;
         let mut cursor = struct_deseriallizer.cursor;
         let mut prop: Option<BodyCursor> = None;
@@ -81,6 +81,7 @@ impl<'de> Node<'de> {
                 }
             }
         }
+        struct_deseriallizer.cursor = cursor;
         Node {
             cursor: struct_deseriallizer.cursor,
             reg: struct_deseriallizer.reg,
@@ -90,6 +91,7 @@ impl<'de> Node<'de> {
         }
     }
 
+    // TODO: Maybe use BTreeMap when have alloc
     /// 获得节点迭代器。
     pub const fn nodes<'b>(&'b self) -> Option<NodeIter<'de, 'b>> {
         match self.nodes_start {
