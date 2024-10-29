@@ -1,19 +1,8 @@
 use crate::buildin::Node;
 
-pub trait DeviceTreeTraversal {
-    fn find(&self, _path: &str) -> Option<Node> {
-        None
-    }
-    fn search<F>(&self, _func: &mut F)
-    where
-        F: FnMut(&Node),
-    {
-    }
-}
-
-impl DeviceTreeTraversal for Node<'_> {
+impl Node<'_> {
     /// Try to get a node by path
-    fn find(&self, path: &str) -> Option<Node> {
+    pub fn find(&self, path: &str) -> Option<Node> {
         // Direct return root node
         let mut current_node = Some(self.clone());
         if path == "/" {
@@ -49,7 +38,7 @@ impl DeviceTreeTraversal for Node<'_> {
     }
 
     /// use depth-first search to traversal the tree, and exec func for each node
-    fn search<F>(&self, func: &mut F)
+    pub fn search<F>(&self, func: &mut F)
     where
         F: FnMut(&Node),
     {
