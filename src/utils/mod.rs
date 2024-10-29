@@ -11,7 +11,7 @@ pub trait DeviceTreeTraversal {
     }
 }
 
-impl<'de> DeviceTreeTraversal for Node<'de> {
+impl DeviceTreeTraversal for Node<'_> {
     /// Try to get a node by path
     fn find(&self, path: &str) -> Option<Node> {
         // Direct return root node
