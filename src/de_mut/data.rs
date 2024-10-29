@@ -1,13 +1,62 @@
-﻿use super::{DtError, PropCursor, RefDtb, RegConfig};
-use serde::de;
+﻿use super::BodyCursor;
+use super::{DtError, PropCursor, RefDtb, RegConfig};
 
-pub(super) struct BorrowedValueDeserializer<'de> {
-    pub dtb: RefDtb<'de>,
-    pub reg: RegConfig,
-    pub cursor: PropCursor,
+use core::marker::PhantomData;
+use serde::{de, Deserialize};
+
+#[derive(Clone, Debug)]
+pub(super) enum ValueCursor {
+    Prop(PropCursor),
+    Body(BodyCursor),
 }
 
-impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
+#[derive(Clone)]
+pub(super) struct ValueDeserializer<'de> {
+    pub dtb: RefDtb<'de>,
+    pub reg: RegConfig,
+    pub body_cursor: BodyCursor,
+    pub cursor: ValueCursor,
+}
+
+impl<'de> Deserialize<'de> for ValueDeserializer<'_> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct Visitor<'de, 'b> {
+            marker: PhantomData<ValueDeserializer<'b>>,
+            lifetime: PhantomData<&'de ()>,
+        }
+        impl<'de, 'b> de::Visitor<'de> for Visitor<'de, 'b> {
+            type Value = ValueDeserializer<'b>;
+
+            fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
+                write!(formatter, "struct ValueDeserializer")
+            }
+
+            fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            where
+                D: de::Deserializer<'de>,
+            {
+                Ok(unsafe {
+                    (*(core::ptr::addr_of!(deserializer) as *const _ as *const &ValueDeserializer))
+                        .clone()
+                })
+            }
+        }
+
+        serde::Deserializer::deserialize_newtype_struct(
+            deserializer,
+            super::VALUE_DESERIALIZER_NAME,
+            Visitor {
+                marker: PhantomData,
+                lifetime: PhantomData,
+            },
+        )
+    }
+}
+
+impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     type Error = DtError;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -21,14 +70,17 @@ impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        let val = self.cursor.map_on(self.dtb, |data| {
-            if data.is_empty() {
-                true
-            } else {
-                todo!("&[u8] -> bool")
-            }
-        });
-        visitor.visit_bool(val)
+        if let ValueCursor::Prop(cursor) = self.cursor {
+            let val = cursor.map_on(self.dtb, |data| {
+                if data.is_empty() {
+                    true
+                } else {
+                    todo!("&[u8] -> bool")
+                }
+            });
+            return visitor.visit_bool(val);
+        }
+        unreachable!("Node -> bool");
     }
 
     fn deserialize_i8<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -77,7 +129,10 @@ impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        visitor.visit_u32(self.cursor.map_u32_on(self.dtb)?)
+        if let ValueCursor::Prop(cursor) = self.cursor {
+            return visitor.visit_u32(cursor.map_u32_on(self.dtb)?);
+        }
+        unreachable!("node -> u32");
     }
 
     fn deserialize_u64<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -108,12 +163,11 @@ impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
         unreachable!("char")
     }
 
-    fn deserialize_str<V>(self, visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_str<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        let data = self.cursor.data_on(self.dtb);
-        visitor.visit_borrowed_str(unsafe { core::str::from_utf8_unchecked(data) })
+        unreachable!("str");
     }
 
     fn deserialize_string<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -127,8 +181,11 @@ impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        let data = self.cursor.data_on(self.dtb);
-        visitor.visit_borrowed_bytes(data)
+        if let ValueCursor::Prop(cursor) = self.cursor {
+            let data = cursor.data_on(self.dtb);
+            return visitor.visit_borrowed_bytes(data);
+        }
+        unreachable!("node -> bytes");
     }
 
     fn deserialize_byte_buf<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
@@ -142,11 +199,16 @@ impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        let data = self.cursor.data_on(self.dtb);
-        if data.is_empty() {
-            visitor.visit_none()
-        } else {
-            visitor.visit_some(self)
+        match self.cursor {
+            ValueCursor::Prop(cursor) => {
+                let data = cursor.data_on(self.dtb);
+                if data.is_empty() {
+                    visitor.visit_none()
+                } else {
+                    visitor.visit_some(self)
+                }
+            }
+            ValueCursor::Body(_) => visitor.visit_some(self),
         }
     }
 
@@ -176,33 +238,39 @@ impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        match name {
-            "StrSeq" => {
-                let inner = super::str_seq::Inner {
-                    dtb: self.dtb,
-                    cursor: self.cursor,
-                };
-                visitor.visit_borrowed_bytes(unsafe {
-                    core::slice::from_raw_parts(
-                        &inner as *const _ as *const u8,
-                        core::mem::size_of_val(&inner),
-                    )
-                })
-            }
-            "Reg" => {
-                let inner = super::reg::Inner {
-                    dtb: self.dtb,
-                    reg: self.reg,
-                    cursor: self.cursor,
-                };
-                visitor.visit_borrowed_bytes(unsafe {
-                    core::slice::from_raw_parts(
-                        &inner as *const _ as *const u8,
-                        core::mem::size_of_val(&inner),
-                    )
-                })
-            }
-            _ => visitor.visit_newtype_struct(self),
+        if name == super::VALUE_DESERIALIZER_NAME {
+            return visitor.visit_newtype_struct(self);
+        }
+        match self.cursor {
+            ValueCursor::Prop(cursor) => match name {
+                "StrSeq" => {
+                    let inner = super::str_seq::Inner {
+                        dtb: self.dtb,
+                        cursor,
+                    };
+                    visitor.visit_borrowed_bytes(unsafe {
+                        core::slice::from_raw_parts(
+                            &inner as *const _ as *const u8,
+                            core::mem::size_of_val(&inner),
+                        )
+                    })
+                }
+                "Reg" => {
+                    let inner = super::reg::Inner {
+                        dtb: self.dtb,
+                        reg: self.reg,
+                        cursor,
+                    };
+                    visitor.visit_borrowed_bytes(unsafe {
+                        core::slice::from_raw_parts(
+                            &inner as *const _ as *const u8,
+                            core::mem::size_of_val(&inner),
+                        )
+                    })
+                }
+                _ => visitor.visit_newtype_struct(self),
+            },
+            ValueCursor::Body(_) => visitor.visit_newtype_struct(self),
         }
     }
 
@@ -232,23 +300,39 @@ impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
         unreachable!("tuple_struct")
     }
 
-    fn deserialize_map<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        unreachable!("map")
+        use super::{StructAccess, Temp};
+        if let ValueCursor::Body(cursor) = self.cursor {
+            return visitor.visit_map(StructAccess {
+                fields: None,
+                temp: Temp::Node(self.body_cursor, cursor),
+                de: self,
+            });
+        };
+        unreachable!("Prop -> map")
     }
 
     fn deserialize_struct<V>(
         self,
         _name: &'static str,
-        _fields: &'static [&'static str],
-        _visitor: V,
+        fields: &'static [&'static str],
+        visitor: V,
     ) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        unreachable!("struct {_name} {_fields:?}")
+        use super::{StructAccess, Temp};
+        if let ValueCursor::Body(cursor) = self.cursor {
+            return visitor.visit_map(StructAccess {
+                fields: Some(fields),
+                temp: Temp::Node(self.body_cursor, cursor),
+                de: self,
+            });
+        };
+        unreachable!("Prop -> struct {_name} {fields:?}")
     }
 
     fn deserialize_enum<V>(
@@ -275,5 +359,36 @@ impl<'de> de::Deserializer<'de> for &mut BorrowedValueDeserializer<'de> {
         V: de::Visitor<'de>,
     {
         unreachable!("ignored_any")
+    }
+}
+
+impl ValueDeserializer<'_> {
+    #[inline]
+    pub fn move_next(&mut self) -> super::Cursor {
+        if let ValueCursor::Body(ref mut cursor) = self.cursor {
+            return cursor.move_on(self.dtb);
+        };
+        unreachable!("move_on prop cursor");
+    }
+    #[inline]
+    pub fn step_n(&mut self, n: usize) {
+        if let ValueCursor::Body(ref mut cursor) = self.cursor {
+            return cursor.step_n(n);
+        };
+        unreachable!("step_n prop cursor");
+    }
+    #[inline]
+    pub fn is_complete_on(&self) -> bool {
+        if let ValueCursor::Body(cursor) = self.cursor {
+            return cursor.is_complete_on(self.dtb);
+        };
+        unreachable!("is_complete_on prop cursor");
+    }
+    #[inline]
+    pub fn file_index_on(&self) -> usize {
+        if let ValueCursor::Body(cursor) = self.cursor {
+            return cursor.file_index_on(self.dtb);
+        };
+        unreachable!("file_index_on prop cursor");
     }
 }

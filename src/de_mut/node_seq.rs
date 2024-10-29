@@ -1,4 +1,4 @@
-﻿use super::{BodyCursor, GroupCursor, RefDtb, RegConfig, StructDeserializer};
+﻿use super::{BodyCursor, GroupCursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
 use crate::de_mut::GroupDeserializer;
 use core::{fmt::Debug, marker::PhantomData};
 use serde::{de, Deserialize};
@@ -159,10 +159,11 @@ impl NodeSeqItem<'_> {
 impl<'de> NodeSeqItem<'de> {
     /// 反序列化一个节点的内容。
     pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
-        T::deserialize(&mut StructDeserializer {
+        T::deserialize(&mut ValueDeserializer {
             dtb: self.dtb,
             reg: self.reg,
-            cursor: self.body,
+            body_cursor: self.body,
+            cursor: ValueCursor::Body(self.body),
         })
         .unwrap()
     }
