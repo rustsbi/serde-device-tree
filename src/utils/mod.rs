@@ -58,8 +58,7 @@ mod tests {
         buildin::{Node, StrSeq},
         from_raw_mut, Dtb, DtbPtr,
     };
-    static RAW_DEVICE_TREE: &[u8] =
-        include_bytes!("../../examples/hifive-unmatched-a00.dtb");
+    static RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/hifive-unmatched-a00.dtb");
     const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
     #[repr(align(8))]
     struct AlignedBuffer {

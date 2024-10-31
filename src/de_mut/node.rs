@@ -50,19 +50,19 @@ impl<'de> Node<'de> {
     /// 获得节点迭代器。
     pub fn nodes<'b>(&'b self) -> Option<NodeIter<'de, 'b>> {
         self.nodes_start.map(|node_cursor| NodeIter {
-                node: self,
-                cursor: node_cursor,
-                i: 0,
-            })
+            node: self,
+            cursor: node_cursor,
+            i: 0,
+        })
     }
 
     /// 获得属性迭代器。
     pub fn props<'b>(&'b self) -> Option<PropIter<'de, 'b>> {
         self.props_start.map(|node_cursor| PropIter {
-                node: self,
-                cursor: node_cursor,
-                i: 0,
-            })
+            node: self,
+            cursor: node_cursor,
+            i: 0,
+        })
     }
 }
 
