@@ -6,7 +6,7 @@ use serde::de;
 
 mod cursor;
 mod data;
-mod group;
+// mod group;
 mod node;
 mod node_seq;
 mod reg;
@@ -21,9 +21,8 @@ pub mod buildin {
     pub use super::{node::Node, node_seq::NodeSeq, reg::Reg, str_seq::StrSeq};
 }
 
-use cursor::{BodyCursor, Cursor, GroupCursor, PropCursor};
+use cursor::{BodyCursor, Cursor, PropCursor};
 use data::{ValueCursor, ValueDeserializer};
-use group::GroupDeserializer;
 use reg::RegConfig;
 use structs::{RefDtb, StructureBlock, BLOCK_LEN};
 
@@ -40,7 +39,6 @@ where
     let mut d = ValueDeserializer {
         dtb,
         reg: RegConfig::DEFAULT,
-        body_cursor: BodyCursor::ROOT,
         cursor: ValueCursor::Body(BodyCursor::ROOT),
     };
     T::deserialize(&mut d).and_then(|t| {
@@ -54,14 +52,15 @@ where
 }
 
 // For map type, we should send root item to trans dtb and reg
-enum StructAccessType {
+enum StructAccessType<'de> {
     Map(bool),
+    Seq(&'de str),
     Struct(&'static [&'static str]),
 }
 
 /// 结构体解析状态。
 struct StructAccess<'de, 'b> {
-    access_type: StructAccessType,
+    access_type: StructAccessType<'de>,
     temp: Temp,
     de: &'b mut ValueDeserializer<'de>,
 }
@@ -72,7 +71,7 @@ struct StructAccess<'de, 'b> {
 /// 根据状态分发值解析器。
 enum Temp {
     Node(BodyCursor, BodyCursor),
-    Group(GroupCursor, usize, usize),
+    Group(BodyCursor),
     Prop(BodyCursor, PropCursor),
 }
 
@@ -101,7 +100,7 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                 ValueCursor::Body(cursor) => cursor,
                 _ => unreachable!("map access's cursor should always be body cursor"),
             };
-            match self.de.move_next() {
+            match self.de.move_on() {
                 // 子节点名字
                 Cursor::Title(c) => {
                     let (name, _) = c.split_on(self.de.dtb);
@@ -120,10 +119,10 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     else {
                         let name_bytes = &name.as_bytes()[..pre_len];
                         let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
-                        let (group, len, next) = c.take_group_on(self.de.dtb, name);
+                        let (group, _, next) = c.take_group_on(self.de.dtb, name);
                         self.de.cursor = ValueCursor::Body(next);
                         if check_contains(name) {
-                            self.temp = Temp::Group(group, len, name.len());
+                            self.temp = Temp::Group(group);
                             break name;
                         }
                     }
@@ -167,40 +166,83 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                 return seed.deserialize(&mut ValueDeserializer {
                     dtb: self.de.dtb,
                     reg: self.de.reg,
-                    body_cursor: self.de.body_cursor,
                     cursor: self.de.cursor,
                 });
             }
         }
         match self.temp {
-            Temp::Node(origin_cursor, cursor) => {
+            Temp::Node(cursor, node_cursor) => {
                 // 键是独立节点名字，递归
+                match self.access_type {
+                    StructAccessType::Map(_) => seed.deserialize(&mut ValueDeserializer {
+                        dtb: self.de.dtb,
+                        reg: self.de.reg,
+                        cursor: ValueCursor::Body(cursor),
+                    }),
+                    StructAccessType::Struct(_) => seed.deserialize(&mut ValueDeserializer {
+                        dtb: self.de.dtb,
+                        reg: self.de.reg,
+                        cursor: ValueCursor::Body(node_cursor),
+                    }),
+                    _ => unreachable!(),
+                }
+            }
+            Temp::Group(cursor) => {
+                // 键是组名字，构造组反序列化器
                 seed.deserialize(&mut ValueDeserializer {
                     dtb: self.de.dtb,
                     reg: self.de.reg,
-                    body_cursor: origin_cursor,
                     cursor: ValueCursor::Body(cursor),
-                })
-            }
-            Temp::Group(cursor, len_item, len_name) => {
-                // 键是组名字，构造组反序列化器
-                seed.deserialize(&mut GroupDeserializer {
-                    dtb: self.de.dtb,
-                    cursor,
-                    reg: self.de.reg,
-                    len_item,
-                    len_name,
                 })
             }
             Temp::Prop(origin_cursor, cursor) => {
                 // 键是属性名字，构造属性反序列化器
                 seed.deserialize(&mut ValueDeserializer {
                     dtb: self.de.dtb,
-                    body_cursor: origin_cursor,
                     reg: self.de.reg,
-                    cursor: ValueCursor::Prop(cursor),
+                    cursor: ValueCursor::Prop(origin_cursor, cursor),
                 })
             }
+        }
+    }
+}
+
+impl<'de> de::SeqAccess<'de> for StructAccess<'de, '_> {
+    type Error = DtError;
+
+    fn next_element_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
+    where
+        K: de::DeserializeSeed<'de>,
+    {
+        if let StructAccessType::Seq(pre_name) = self.access_type {
+            match self.de.move_on() {
+                // 子节点名字
+                Cursor::Title(c) => {
+                    let (name, _) = c.split_on(self.de.dtb);
+                    let (_, next) = c.take_node_on(self.de.dtb, name);
+                    let prev_cursor = match self.de.cursor {
+                        ValueCursor::Body(cursor) => cursor,
+                        _ => unreachable!(),
+                    };
+
+                    let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
+                    let name_bytes = &name.as_bytes()[..pre_len];
+                    let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
+                    if pre_name != name {
+                        return Ok(None);
+                    }
+                    self.de.cursor = ValueCursor::Body(next);
+                    seed.deserialize(&mut ValueDeserializer {
+                        dtb: self.de.dtb,
+                        reg: self.de.reg,
+                        cursor: ValueCursor::Body(prev_cursor),
+                    })
+                    .map(Some)
+                }
+                _ => Ok(None),
+            }
+        } else {
+            unreachable!("SeqAccess should only be accessed by seq");
         }
     }
 }

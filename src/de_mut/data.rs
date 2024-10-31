@@ -1,4 +1,4 @@
-﻿use super::BodyCursor;
+﻿use super::{BodyCursor, Cursor};
 use super::{DtError, PropCursor, RefDtb, RegConfig};
 
 use core::marker::PhantomData;
@@ -6,15 +6,14 @@ use serde::{de, Deserialize};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ValueCursor {
-    Prop(PropCursor),
+    Prop(BodyCursor, PropCursor),
     Body(BodyCursor),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(super) struct ValueDeserializer<'de> {
     pub dtb: RefDtb<'de>,
     pub reg: RegConfig,
-    pub body_cursor: BodyCursor,
     pub cursor: ValueCursor,
 }
 
@@ -39,8 +38,7 @@ impl<'de> Deserialize<'de> for ValueDeserializer<'_> {
                 D: de::Deserializer<'de>,
             {
                 Ok(unsafe {
-                    (*(core::ptr::addr_of!(deserializer) as *const _ as *const &ValueDeserializer))
-                        .clone()
+                    *(*(core::ptr::addr_of!(deserializer) as *const _ as *const &ValueDeserializer))
                 })
             }
         }
@@ -70,7 +68,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        if let ValueCursor::Prop(cursor) = self.cursor {
+        if let ValueCursor::Prop(_, cursor) = self.cursor {
             let val = cursor.map_on(self.dtb, |data| {
                 if data.is_empty() {
                     true
@@ -129,7 +127,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        if let ValueCursor::Prop(cursor) = self.cursor {
+        if let ValueCursor::Prop(_, cursor) = self.cursor {
             return visitor.visit_u32(cursor.map_u32_on(self.dtb)?);
         }
         unreachable!("node -> u32");
@@ -181,7 +179,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        if let ValueCursor::Prop(cursor) = self.cursor {
+        if let ValueCursor::Prop(_, cursor) = self.cursor {
             let data = cursor.data_on(self.dtb);
             return visitor.visit_borrowed_bytes(data);
         }
@@ -200,7 +198,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
         V: de::Visitor<'de>,
     {
         match self.cursor {
-            ValueCursor::Prop(cursor) => {
+            ValueCursor::Prop(_, cursor) => {
                 let data = cursor.data_on(self.dtb);
                 if data.is_empty() {
                     visitor.visit_none()
@@ -242,7 +240,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
             return visitor.visit_newtype_struct(self);
         }
         match self.cursor {
-            ValueCursor::Prop(cursor) => match name {
+            ValueCursor::Prop(_, cursor) => match name {
                 "StrSeq" => {
                     let inner = super::str_seq::Inner {
                         dtb: self.dtb,
@@ -274,11 +272,31 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
         }
     }
 
-    fn deserialize_seq<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
+    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>
     where
         V: de::Visitor<'de>,
     {
-        unreachable!("seq")
+        use super::{StructAccess, StructAccessType, Temp};
+        match self.move_on() {
+            Cursor::Title(c) => {
+                let (name, _) = c.split_on(self.dtb);
+                let cursor = match self.cursor {
+                    ValueCursor::Body(cursor) => cursor,
+                    _ => unreachable!(""),
+                };
+
+                let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
+                let name_bytes = &name.as_bytes()[..pre_len];
+                let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
+
+                visitor.visit_seq(StructAccess {
+                    access_type: StructAccessType::Seq(name),
+                    temp: Temp::Node(cursor, cursor),
+                    de: self,
+                })
+            }
+            _ => unreachable!("seq request on a none seq cursor"),
+        }
     }
 
     fn deserialize_tuple<V>(self, _len: usize, _visitor: V) -> Result<V::Value, Self::Error>
@@ -308,7 +326,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
         if let ValueCursor::Body(cursor) = self.cursor {
             return visitor.visit_map(StructAccess {
                 access_type: StructAccessType::Map(false),
-                temp: Temp::Node(self.body_cursor, cursor),
+                temp: Temp::Node(cursor, cursor),
                 de: self,
             });
         };
@@ -328,7 +346,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
         if let ValueCursor::Body(cursor) = self.cursor {
             return visitor.visit_map(StructAccess {
                 access_type: StructAccessType::Struct(fields),
-                temp: Temp::Node(self.body_cursor, cursor),
+                temp: Temp::Node(cursor, cursor),
                 de: self,
             });
         };
@@ -364,7 +382,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
 
 impl ValueDeserializer<'_> {
     #[inline]
-    pub fn move_next(&mut self) -> super::Cursor {
+    pub fn move_on(&mut self) -> super::Cursor {
         if let ValueCursor::Body(ref mut cursor) = self.cursor {
             return cursor.move_on(self.dtb);
         };

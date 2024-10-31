@@ -55,5 +55,5 @@ fn hifive_unmatched() {
         }
     }
     assert_eq!(t.cpus.timebase_frequency, 1000000);
-    assert_eq!(t.cpus.u_boot_dm_spl, true);
+    assert!(t.cpus.u_boot_dm_spl);
 }

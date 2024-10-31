@@ -94,6 +94,7 @@ impl StructureBlock {
     /// 构造字节切片。
     ///
     /// TODO
+    #[allow(unused)]
     pub fn lead_slice<'a>(&self, len: usize) -> &'a [u8] {
         unsafe { core::slice::from_raw_parts(self as *const _ as *const u8, len) }
     }
