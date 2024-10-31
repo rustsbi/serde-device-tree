@@ -4,7 +4,7 @@ use super::{DtError, PropCursor, RefDtb, RegConfig};
 use core::marker::PhantomData;
 use serde::{de, Deserialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub(super) enum ValueCursor {
     Prop(PropCursor),
     Body(BodyCursor),
@@ -304,10 +304,10 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        use super::{StructAccess, Temp};
+        use super::{StructAccess, StructAccessType, Temp};
         if let ValueCursor::Body(cursor) = self.cursor {
             return visitor.visit_map(StructAccess {
-                fields: None,
+                access_type: StructAccessType::Map(false),
                 temp: Temp::Node(self.body_cursor, cursor),
                 de: self,
             });
@@ -324,10 +324,10 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     where
         V: de::Visitor<'de>,
     {
-        use super::{StructAccess, Temp};
+        use super::{StructAccess, StructAccessType, Temp};
         if let ValueCursor::Body(cursor) = self.cursor {
             return visitor.visit_map(StructAccess {
-                fields: Some(fields),
+                access_type: StructAccessType::Struct(fields),
                 temp: Temp::Node(self.body_cursor, cursor),
                 de: self,
             });

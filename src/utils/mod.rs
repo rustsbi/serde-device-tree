@@ -54,7 +54,6 @@ impl Node<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{
         buildin::{Node, StrSeq},
         from_raw_mut, Dtb, DtbPtr,

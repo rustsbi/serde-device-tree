@@ -53,9 +53,15 @@ where
     })
 }
 
+// For map type, we should send root item to trans dtb and reg
+enum StructAccessType {
+    Map(bool),
+    Struct(&'static [&'static str]),
+}
+
 /// 结构体解析状态。
 struct StructAccess<'de, 'b> {
-    fields: Option<&'static [&'static str]>,
+    access_type: StructAccessType,
     temp: Temp,
     de: &'b mut ValueDeserializer<'de>,
 }
@@ -77,10 +83,17 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
     where
         K: de::DeserializeSeed<'de>,
     {
+        if let StructAccessType::Map(flag) = self.access_type {
+            if !flag {
+                return seed
+                    .deserialize(de::value::BorrowedStrDeserializer::new("/"))
+                    .map(Some);
+            }
+        }
         let check_contains = |name: &str| -> bool {
-            match self.fields {
-                Some(fields) => fields.contains(&name),
-                None => true,
+            match self.access_type {
+                StructAccessType::Struct(fields) => fields.contains(&name),
+                _ => true,
             }
         };
         let name = loop {
@@ -148,6 +161,17 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
     where
         V: de::DeserializeSeed<'de>,
     {
+        if let StructAccessType::Map(ref mut flag) = self.access_type {
+            if !*flag {
+                *flag = true;
+                return seed.deserialize(&mut ValueDeserializer {
+                    dtb: self.de.dtb,
+                    reg: self.de.reg,
+                    body_cursor: self.de.body_cursor,
+                    cursor: self.de.cursor,
+                });
+            }
+        }
         match self.temp {
             Temp::Node(origin_cursor, cursor) => {
                 // 键是独立节点名字，递归

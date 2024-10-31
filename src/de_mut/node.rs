@@ -179,9 +179,12 @@ impl<'de> Deserialize<'de> for Node<'_> {
                 let mut reg: Option<RegConfig> = None;
                 let mut props_start: Option<BodyCursor> = None;
                 let mut nodes_start: Option<BodyCursor> = None;
-                while let Some((_, value)) = access.next_entry::<&str, ValueDeserializer<'b>>()? {
+                while let Some((key, value)) = access.next_entry::<&str, ValueDeserializer<'b>>()? {
                     dtb = Some(value.dtb);
                     reg = Some(value.reg);
+                    if key == "/" {
+                        continue;
+                    }
                     match value.cursor {
                         ValueCursor::Prop(_) => {
                             if props_start.is_none() {
@@ -196,7 +199,6 @@ impl<'de> Deserialize<'de> for Node<'_> {
                     }
                 }
 
-                // TODO: May panic if a node have no children & prop
                 Ok(Node {
                     dtb: dtb.unwrap(),
                     reg: reg.unwrap(),
