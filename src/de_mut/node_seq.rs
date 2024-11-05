@@ -134,11 +134,15 @@ impl<'de> Iterator for NodeSeqIter<'de, '_> {
             match self.de.move_on() {
                 // 子节点名字
                 Cursor::Title(c) => {
-                    let (name, _) = c.split_on(self.de.dtb);
-                    let (node, next) = c.take_node_on(self.de.dtb, name);
+                    let (full_name, _) = c.split_on(self.de.dtb);
+                    let (node, next) = c.take_node_on(self.de.dtb, full_name);
 
-                    let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
-                    let name_bytes = &name.as_bytes()[..pre_len];
+                    let pre_len = full_name
+                        .as_bytes()
+                        .iter()
+                        .take_while(|b| **b != b'@')
+                        .count();
+                    let name_bytes = &full_name.as_bytes()[..pre_len];
                     let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
                     if self.seq.name != name {
                         return None;
@@ -150,7 +154,7 @@ impl<'de> Iterator for NodeSeqIter<'de, '_> {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
                         body: node,
-                        at: &name[pre_len..],
+                        at: &full_name[pre_len + 1..],
                     })
                 }
                 _ => None,
