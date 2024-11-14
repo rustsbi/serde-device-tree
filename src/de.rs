@@ -77,7 +77,7 @@ where
 
     let total_size = u32::from_be(header.total_size);
     let raw_data_len = (total_size - HEADER_LEN) as usize;
-    let ans_ptr = core::ptr::from_raw_parts(ptr as *const u8, raw_data_len);
+    let ans_ptr = core::ptr::from_raw_parts(ptr, raw_data_len);
     let device_tree: &DeviceTree = &*ans_ptr;
     let tags = device_tree.tags();
     let mut d = Deserializer {

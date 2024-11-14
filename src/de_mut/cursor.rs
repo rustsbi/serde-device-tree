@@ -7,7 +7,6 @@ pub(super) struct AnyCursor<T: Type = Body>(usize, PhantomData<T>);
 
 pub(super) type BodyCursor = AnyCursor<Body>;
 pub(super) type TitleCursor = AnyCursor<Title>;
-pub(super) type GroupCursor = AnyCursor<Group>;
 pub(super) type PropCursor = AnyCursor<Prop>;
 
 pub(super) trait Type {}
@@ -17,13 +16,10 @@ pub(super) struct Body {}
 #[derive(Clone, Copy, Debug)]
 pub(super) struct Title {}
 #[derive(Clone, Copy, Debug)]
-pub(super) struct Group {}
-#[derive(Clone, Copy, Debug)]
 pub(super) struct Prop {}
 
 impl Type for Body {}
 impl Type for Title {}
-impl Type for Group {}
 impl Type for Prop {}
 
 pub enum MoveResult {
@@ -107,7 +103,7 @@ impl BodyCursor {
                 self.0 += 1;
                 MoveResult::Others
             }
-            _ => todo!(),
+            _ => todo!("unknown block {}", structure[self.0]),
         }
     }
 
@@ -149,10 +145,10 @@ impl TitleCursor {
     }
 
     /// 生成组光标。
-    pub fn take_group_on(&self, dtb: RefDtb, name: &str) -> (GroupCursor, usize, BodyCursor) {
+    pub fn take_group_on(&self, dtb: RefDtb, name: &str) -> (BodyCursor, usize, BodyCursor) {
         let name_bytes = name.as_bytes();
         let name_skip = align(name_bytes.len() + 1, BLOCK_LEN);
-        let group = AnyCursor::<Group>(self.0, PhantomData);
+        let group = AnyCursor::<Body>(self.0, PhantomData);
 
         let mut body = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
         let mut len = 1;
@@ -191,57 +187,6 @@ impl TitleCursor {
 
         body.escape_from(dtb);
         (node, body)
-    }
-}
-
-impl GroupCursor {
-    /// 读取缓存的下一项偏移。
-    pub fn offset_on(&self, dtb: RefDtb) -> usize {
-        (dtb.borrow().structure[self.0].0 >> 8) as _
-    }
-
-    /// 利用缓存的名字长度取出名字。
-    pub fn name_on<'a>(&self, dtb: RefDtb<'a>) -> (&'a [u8], BodyCursor) {
-        let structure = &dtb.borrow().structure;
-        let len_name = (structure[self.0].0 & 0xff) as usize;
-        let bytes = structure[self.0 + 1].lead_slice(len_name);
-        (
-            bytes,
-            AnyCursor(self.0 + 1 + align(len_name + 1, BLOCK_LEN), PhantomData),
-        )
-    }
-
-    /// 初始化组反序列化。
-    pub fn init_on(&self, dtb: RefDtb, len_item: usize, len_name: usize) {
-        let mut body = AnyCursor::<Body>(self.0, PhantomData);
-        for _ in 0..len_item {
-            let current = body.0;
-            let len_total = dtb.borrow().structure[current + 1]
-                .lead_slice(u16::MAX as _)
-                .iter()
-                .enumerate()
-                .skip(len_name + 1)
-                .find(|(_, b)| **b == b'\0')
-                .map(|(i, _)| i)
-                .unwrap();
-            body.step_n(align(len_total, BLOCK_LEN));
-            body.skip_str_on(dtb);
-            body.escape_from(dtb);
-            let off_next = body.0 - current;
-            dtb.borrow_mut().structure[current].0 = (off_next << 8 | len_total) as _;
-        }
-    }
-
-    /// 组结构恢复原状。
-    pub fn drop_on(&self, dtb: RefDtb, len_item: usize) {
-        use StructureBlock as B;
-        let structure = &mut *dtb.borrow_mut().structure;
-        let mut i = self.0;
-        for _ in 0..len_item {
-            let offset = (structure[i].0 >> 8) as usize;
-            structure[i] = B::NODE_BEGIN;
-            i += offset;
-        }
     }
 }
 

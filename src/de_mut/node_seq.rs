@@ -1,6 +1,6 @@
-﻿use super::{BodyCursor, GroupCursor, RefDtb, RegConfig, StructDeserializer};
-use crate::de_mut::GroupDeserializer;
+﻿use super::{BodyCursor, Cursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
 use core::{fmt::Debug, marker::PhantomData};
+use serde::de::SeqAccess;
 use serde::{de, Deserialize};
 
 /// 一组名字以 `@...` 区分，同类、同级且连续的节点的映射。
@@ -9,13 +9,15 @@ use serde::{de, Deserialize};
 /// 因此这些节点将延迟解析。
 /// 迭代 `NodeSeq` 可获得一系列 [`NodeSeqItem`]，再调用 `deserialize` 方法分别解析每个节点。
 pub struct NodeSeq<'de> {
-    inner: GroupDeserializer<'de>,
+    name: &'de str,
+    count: usize,
+    starter: ValueDeserializer<'de>,
 }
 
 /// 连续节点迭代器。
 pub struct NodeSeqIter<'de, 'b> {
     seq: &'b NodeSeq<'de>,
-    cursor: GroupCursor,
+    de: ValueDeserializer<'de>,
     i: usize,
 }
 
@@ -40,28 +42,43 @@ impl<'de> Deserialize<'de> for NodeSeq<'_> {
             type Value = NodeSeq<'b>;
 
             fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(formatter, "struct StrSeq")
+                write!(formatter, "struct ValueDeserializer")
             }
 
-            fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
-                E: de::Error,
+                A: SeqAccess<'de>,
             {
-                // 结构体转为内存切片，然后拷贝过来
-                if v.len() == core::mem::size_of::<Self::Value>() {
-                    Ok(Self::Value::from_raw_inner_parts(v.as_ptr()))
-                } else {
-                    Err(E::invalid_length(
-                        v.len(),
-                        &"`NodeSeq` is copied with wrong size.",
-                    ))
+                let mut starter: Option<ValueDeserializer> = None;
+                let mut count = 0;
+                while let Some(node) = seq.next_element()? {
+                    if starter.is_none() {
+                        starter = Some(node);
+                    }
+                    count += 1
+                }
+                let mut starter = starter.unwrap();
+
+                match starter.move_on() {
+                    Cursor::Title(c) => {
+                        let (name, _) = c.split_on(starter.dtb);
+
+                        let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
+                        let name_bytes = &name.as_bytes()[..pre_len];
+                        let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
+                        Ok(NodeSeq {
+                            name,
+                            count,
+                            starter,
+                        })
+                    }
+                    _ => unreachable!("NodeSeq should be inited by a node"),
                 }
             }
         }
 
-        serde::Deserializer::deserialize_newtype_struct(
+        serde::Deserializer::deserialize_seq(
             deserializer,
-            "NodeSeq",
             Visitor {
                 marker: PhantomData,
                 lifetime: PhantomData,
@@ -71,22 +88,9 @@ impl<'de> Deserialize<'de> for NodeSeq<'_> {
 }
 
 impl<'de> NodeSeq<'de> {
-    fn from_raw_inner_parts(ptr: *const u8) -> Self {
-        // 直接从指针拷贝
-        let original_inner = unsafe { &*(ptr as *const GroupDeserializer<'_>) };
-        let res = Self {
-            inner: *original_inner,
-        };
-        // 初始化
-        res.inner
-            .cursor
-            .init_on(res.inner.dtb, res.inner.len_item, res.inner.len_name);
-        res
-    }
-
     /// 连续节点总数。
     pub const fn len(&self) -> usize {
-        self.inner.len_item
+        self.count
     }
 
     /// 如果连续节点数量为零，返回 true。但连续节点数量不可能为零。
@@ -98,7 +102,7 @@ impl<'de> NodeSeq<'de> {
     pub const fn iter<'b>(&'b self) -> NodeSeqIter<'de, 'b> {
         NodeSeqIter {
             seq: self,
-            cursor: self.inner.cursor,
+            de: self.starter,
             i: 0,
         }
     }
@@ -119,32 +123,42 @@ impl Debug for NodeSeq<'_> {
     }
 }
 
-impl Drop for NodeSeq<'_> {
-    fn drop(&mut self) {
-        self.inner
-            .cursor
-            .drop_on(self.inner.dtb, self.inner.len_item);
-    }
-}
-
 impl<'de> Iterator for NodeSeqIter<'de, '_> {
     type Item = NodeSeqItem<'de>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.i >= self.seq.inner.len_item {
+        if self.i >= self.seq.len() {
             None
         } else {
             self.i += 1;
-            let dtb = self.seq.inner.dtb;
-            let (name, body) = self.cursor.name_on(dtb);
-            let off_next = self.cursor.offset_on(dtb);
-            self.cursor.step_n(off_next);
-            Some(Self::Item {
-                dtb,
-                reg: self.seq.inner.reg,
-                body,
-                at: unsafe { core::str::from_utf8_unchecked(&name[self.seq.inner.len_name + 1..]) },
-            })
+            match self.de.move_on() {
+                // 子节点名字
+                Cursor::Title(c) => {
+                    let (full_name, _) = c.split_on(self.de.dtb);
+                    let (node, next) = c.take_node_on(self.de.dtb, full_name);
+
+                    let pre_len = full_name
+                        .as_bytes()
+                        .iter()
+                        .take_while(|b| **b != b'@')
+                        .count();
+                    let name_bytes = &full_name.as_bytes()[..pre_len];
+                    let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
+                    if self.seq.name != name {
+                        return None;
+                    }
+
+                    self.de.cursor = ValueCursor::Body(next);
+
+                    Some(Self::Item {
+                        dtb: self.de.dtb,
+                        reg: self.de.reg,
+                        body: node,
+                        at: &full_name[pre_len + 1..],
+                    })
+                }
+                _ => None,
+            }
         }
     }
 }
@@ -159,10 +173,10 @@ impl NodeSeqItem<'_> {
 impl<'de> NodeSeqItem<'de> {
     /// 反序列化一个节点的内容。
     pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
-        T::deserialize(&mut StructDeserializer {
+        T::deserialize(&mut ValueDeserializer {
             dtb: self.dtb,
             reg: self.reg,
-            cursor: self.body,
+            cursor: ValueCursor::Body(self.body),
         })
         .unwrap()
     }

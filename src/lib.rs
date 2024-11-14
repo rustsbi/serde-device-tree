@@ -20,6 +20,7 @@ extern crate alloc;
 
 pub mod de;
 pub mod error;
+pub mod utils;
 
 mod common;
 mod de_mut;

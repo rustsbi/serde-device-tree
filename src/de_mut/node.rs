@@ -1,16 +1,13 @@
-﻿use super::{
-    BodyCursor, BorrowedValueDeserializer, Cursor, PropCursor, RefDtb, RegConfig,
-    StructDeserializer,
-};
+﻿use super::{BodyCursor, Cursor, PropCursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
 use core::fmt::Debug;
 use core::marker::PhantomData;
+use serde::de::MapAccess;
 use serde::{de, Deserialize};
 
 #[allow(unused)]
 #[derive(Clone)]
 pub struct Node<'de> {
     dtb: RefDtb<'de>,
-    cursor: BodyCursor,
     reg: RegConfig,
     props_start: Option<BodyCursor>,
     nodes_start: Option<BodyCursor>,
@@ -43,75 +40,29 @@ pub struct PropIter<'de, 'b> {
 pub struct PropItem<'de> {
     dtb: RefDtb<'de>,
     reg: RegConfig,
+    body: BodyCursor,
     prop: PropCursor,
     name: &'de str,
 }
 
 impl<'de> Node<'de> {
-    unsafe fn covnert_from_struct_deseriallizer_pointer(
-        ptr: *const &StructDeserializer<'de>,
-    ) -> Self {
-        let struct_deseriallizer = &*(ptr);
-        let dtb = struct_deseriallizer.dtb;
-        let mut cursor = struct_deseriallizer.cursor;
-        let mut prop: Option<BodyCursor> = None;
-        let mut node: Option<BodyCursor> = None;
-        // TODO: 这里采用朴素的方式遍历块，可能会和 GroupCursor 带来的缓存冲突。
-        // 可能需要一个更优雅的缓存方案或者放弃缓存。
-        loop {
-            match cursor.move_on(dtb) {
-                Cursor::Title(c) => {
-                    let (name, _) = c.split_on(dtb);
-                    let (_, next) = c.take_node_on(dtb, name);
-                    if node.is_none() {
-                        node = Some(cursor)
-                    }
-                    cursor = next;
-                }
-                Cursor::Prop(c) => {
-                    let (_, next) = c.name_on(dtb);
-                    if prop.is_none() {
-                        prop = Some(cursor)
-                    }
-                    cursor = next;
-                }
-                Cursor::End => {
-                    cursor.move_next(dtb);
-                    break;
-                }
-            }
-        }
-        Node {
-            cursor: struct_deseriallizer.cursor,
-            reg: struct_deseriallizer.reg,
-            dtb: struct_deseriallizer.dtb,
-            props_start: prop,
-            nodes_start: node,
-        }
-    }
-
+    // TODO: Maybe use BTreeMap when have alloc
     /// 获得节点迭代器。
-    pub const fn nodes<'b>(&'b self) -> Option<NodeIter<'de, 'b>> {
-        match self.nodes_start {
-            None => None,
-            Some(node_cursor) => Some(NodeIter {
-                node: self,
-                cursor: node_cursor,
-                i: 0,
-            }),
-        }
+    pub fn nodes<'b>(&'b self) -> Option<NodeIter<'de, 'b>> {
+        self.nodes_start.map(|node_cursor| NodeIter {
+            node: self,
+            cursor: node_cursor,
+            i: 0,
+        })
     }
 
     /// 获得属性迭代器。
-    pub const fn props<'b>(&'b self) -> Option<PropIter<'de, 'b>> {
-        match self.props_start {
-            None => None,
-            Some(node_cursor) => Some(PropIter {
-                node: self,
-                cursor: node_cursor,
-                i: 0,
-            }),
-        }
+    pub fn props<'b>(&'b self) -> Option<PropIter<'de, 'b>> {
+        self.props_start.map(|node_cursor| PropIter {
+            node: self,
+            cursor: node_cursor,
+            i: 0,
+        })
     }
 }
 
@@ -184,6 +135,7 @@ impl<'de> Iterator for PropIter<'de, '_> {
             let (name, next) = c.name_on(dtb);
             let res = Some(Self::Item {
                 dtb,
+                body: self.cursor,
                 reg: self.node.reg,
                 prop: c,
                 name,
@@ -211,23 +163,47 @@ impl<'de> Deserialize<'de> for Node<'_> {
             fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
                 write!(formatter, "struct Node")
             }
-
-            fn visit_newtype_struct<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+            fn visit_map<M>(self, mut access: M) -> Result<Self::Value, M::Error>
             where
-                D: de::Deserializer<'de>,
+                M: MapAccess<'de>,
             {
-                Ok(unsafe {
-                    Node::covnert_from_struct_deseriallizer_pointer(core::ptr::addr_of!(
-                        deserializer
-                    )
-                        as *const &StructDeserializer)
+                // While there are entries remaining in the input, add them
+                // into our map.
+                let mut dtb: Option<RefDtb<'b>> = None;
+                let mut reg: Option<RegConfig> = None;
+                let mut props_start: Option<BodyCursor> = None;
+                let mut nodes_start: Option<BodyCursor> = None;
+                while let Some((key, value)) = access.next_entry::<&str, ValueDeserializer<'b>>()? {
+                    dtb = Some(value.dtb);
+                    reg = Some(value.reg);
+                    if key == "/" {
+                        continue;
+                    }
+                    match value.cursor {
+                        ValueCursor::Prop(cursor, _) => {
+                            if props_start.is_none() {
+                                props_start = Some(cursor);
+                            }
+                        }
+                        ValueCursor::Body(cursor) => {
+                            if nodes_start.is_none() {
+                                nodes_start = Some(cursor);
+                            }
+                        }
+                    }
+                }
+
+                Ok(Node {
+                    dtb: dtb.unwrap(),
+                    reg: reg.unwrap(),
+                    nodes_start,
+                    props_start,
                 })
             }
         }
 
-        serde::Deserializer::deserialize_newtype_struct(
+        serde::Deserializer::deserialize_map(
             deserializer,
-            "Node",
             Visitor {
                 marker: PhantomData,
                 lifetime: PhantomData,
@@ -239,10 +215,10 @@ impl<'de> Deserialize<'de> for Node<'_> {
 impl<'de> NodeItem<'de> {
     /// 反序列化一个节点的内容。
     pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
-        T::deserialize(&mut StructDeserializer {
+        T::deserialize(&mut ValueDeserializer {
             dtb: self.dtb,
             reg: self.reg,
-            cursor: self.node,
+            cursor: ValueCursor::Body(self.node),
         })
         .unwrap()
     }
@@ -274,10 +250,11 @@ impl<'de> PropItem<'de> {
         self.name
     }
     pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
-        T::deserialize(&mut BorrowedValueDeserializer {
+        use super::ValueCursor;
+        T::deserialize(&mut ValueDeserializer {
             dtb: self.dtb,
             reg: self.reg,
-            cursor: self.prop,
+            cursor: ValueCursor::Prop(self.body, self.prop),
         })
         .unwrap()
     }

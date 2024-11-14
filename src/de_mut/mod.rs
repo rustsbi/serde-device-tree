@@ -6,25 +6,26 @@ use serde::de;
 
 mod cursor;
 mod data;
-mod group;
+// mod group;
 mod node;
 mod node_seq;
 mod reg;
 mod str_seq;
-mod r#struct;
+// mod r#struct;
+mod struct_access;
 mod structs;
+
+const VALUE_DESERIALIZER_NAME: &str = "$serde_device_tree$de_mut$ValueDeserializer";
 
 pub use structs::{Dtb, DtbPtr};
 pub mod buildin {
     pub use super::{node::Node, node_seq::NodeSeq, reg::Reg, str_seq::StrSeq};
 }
 
-use cursor::{BodyCursor, Cursor, GroupCursor, PropCursor};
-use data::BorrowedValueDeserializer;
-use group::GroupDeserializer;
-// use node::NodeDeserializer;
-use r#struct::StructDeserializer;
+use cursor::{BodyCursor, Cursor, PropCursor};
+use data::{ValueCursor, ValueDeserializer};
 use reg::RegConfig;
+use struct_access::{StructAccess, StructAccessType, Temp};
 use structs::{RefDtb, StructureBlock, BLOCK_LEN};
 
 /// 从 [`RefDtb`] 反序列化一个描述设备树的 `T` 类型实例。
@@ -37,135 +38,17 @@ where
 {
     // 根节点的名字固定为空字符串，
     // 从一个跳过根节点名字的光标初始化解析器。
-    let mut d = StructDeserializer {
+    let mut d = ValueDeserializer {
         dtb,
         reg: RegConfig::DEFAULT,
-        cursor: BodyCursor::ROOT,
+        cursor: ValueCursor::Body(BodyCursor::ROOT),
     };
     T::deserialize(&mut d).and_then(|t| {
         // 解析必须完成
-        if d.cursor.is_complete_on(dtb) {
+        if d.is_complete_on() {
             Ok(t)
         } else {
-            Err(DtError::deserialize_not_complete(
-                d.cursor.file_index_on(d.dtb),
-            ))
+            Err(DtError::deserialize_not_complete(d.file_index_on()))
         }
     })
-}
-
-/// 结构体解析状态。
-struct StructAccess<'de, 'b> {
-    fields: &'static [&'static str],
-    temp: Temp,
-    de: &'b mut StructDeserializer<'de>,
-}
-
-/// 用于跨键-值传递的临时变量。
-///
-/// 解析键（名字）时将确定值类型，保存 `Temp` 类型的状态。
-/// 根据状态分发值解析器。
-enum Temp {
-    Node(BodyCursor),
-    Group(GroupCursor, usize, usize),
-    Prop(PropCursor),
-}
-
-impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
-    type Error = DtError;
-
-    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Self::Error>
-    where
-        K: de::DeserializeSeed<'de>,
-    {
-        let name = loop {
-            match self.de.move_next() {
-                // 子节点名字
-                Cursor::Title(c) => {
-                    let (name, _) = c.split_on(self.de.dtb);
-
-                    let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
-                    // 子节点名字不带 @
-                    if pre_len == name.as_bytes().len() {
-                        let (node, next) = c.take_node_on(self.de.dtb, name);
-                        self.de.cursor = next;
-                        if self.fields.contains(&name) {
-                            self.temp = Temp::Node(node);
-                            break name;
-                        }
-                    }
-                    // @ 之前的部分是真正的名字，用这个名字搜索连续的一组
-                    else {
-                        let name_bytes = &name.as_bytes()[..pre_len];
-                        let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
-                        let (group, len, next) = c.take_group_on(self.de.dtb, name);
-                        self.de.cursor = next;
-                        if self.fields.contains(&name) {
-                            self.temp = Temp::Group(group, len, name.len());
-                            break name;
-                        }
-                    }
-                }
-                // 属性条目
-                Cursor::Prop(c) => {
-                    let (name, next) = c.name_on(self.de.dtb);
-                    self.de.cursor = next;
-                    match name {
-                        "#address-cells" => {
-                            self.de.reg.address_cells = c.map_u32_on(self.de.dtb)?;
-                        }
-                        "#size-cells" => {
-                            self.de.reg.size_cells = c.map_u32_on(self.de.dtb)?;
-                        }
-                        _ => {}
-                    }
-                    if self.fields.contains(&name) {
-                        self.temp = Temp::Prop(c);
-                        break name;
-                    }
-                }
-                // 截止符，结构体解析完成
-                Cursor::End => {
-                    self.de.cursor.step_n(1);
-                    return Ok(None);
-                }
-            }
-        };
-        seed.deserialize(de::value::BorrowedStrDeserializer::new(name))
-            .map(Some)
-    }
-
-    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Self::Error>
-    where
-        V: de::DeserializeSeed<'de>,
-    {
-        match self.temp {
-            Temp::Node(cursor) => {
-                // 键是独立节点名字，递归
-                seed.deserialize(&mut StructDeserializer {
-                    dtb: self.de.dtb,
-                    cursor,
-                    reg: self.de.reg,
-                })
-            }
-            Temp::Group(cursor, len_item, len_name) => {
-                // 键是组名字，构造组反序列化器
-                seed.deserialize(&mut GroupDeserializer {
-                    dtb: self.de.dtb,
-                    cursor,
-                    reg: self.de.reg,
-                    len_item,
-                    len_name,
-                })
-            }
-            Temp::Prop(cursor) => {
-                // 键是属性名字，构造属性反序列化器
-                seed.deserialize(&mut BorrowedValueDeserializer {
-                    dtb: self.de.dtb,
-                    reg: self.de.reg,
-                    cursor,
-                })
-            }
-        }
-    }
 }
