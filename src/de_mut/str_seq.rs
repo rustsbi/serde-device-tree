@@ -1,6 +1,6 @@
-﻿use super::{PropCursor, RefDtb};
-use core::{fmt::Debug, marker::PhantomData, mem::MaybeUninit};
-use serde::{de, Deserialize};
+﻿use super::{PropCursor, RefDtb, ValueCursor};
+use core::fmt::Debug;
+use serde::Deserialize;
 
 /// 一组 '\0' 分隔字符串的映射。
 ///
@@ -31,70 +31,23 @@ impl<'de> Deserialize<'de> for StrSeq<'_> {
     where
         D: serde::Deserializer<'de>,
     {
-        struct Visitor<'de, 'b> {
-            marker: PhantomData<StrSeq<'b>>,
-            lifetime: PhantomData<&'de ()>,
-        }
-        impl<'de, 'b> de::Visitor<'de> for Visitor<'de, 'b> {
-            type Value = StrSeq<'b>;
+        let value_deserialzer = super::ValueDeserializer::deserialize(deserializer)?;
 
-            fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(formatter, "struct StrSeq")
-            }
-
-            fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                // 结构体转为内存切片，然后拷贝过来
-                if v.len() == core::mem::size_of::<Self::Value>() {
-                    Ok(Self::Value::from_raw_parts(v.as_ptr()))
-                } else {
-                    Err(E::invalid_length(
-                        v.len(),
-                        &"`StrSeq` is copied with wrong size.",
-                    ))
+        let inner = Inner {
+            dtb: value_deserialzer.dtb,
+            cursor: match value_deserialzer.cursor {
+                ValueCursor::Prop(_, cursor) => cursor,
+                _ => {
+                    unreachable!("Reg Deserialize should only be called by prop cursor")
                 }
-            }
-        }
-
-        serde::Deserializer::deserialize_newtype_struct(
-            deserializer,
-            "StrSeq",
-            Visitor {
-                marker: PhantomData,
-                lifetime: PhantomData,
             },
-        )
+        };
+
+        Ok(Self(inner))
     }
 }
 
 impl StrSeq<'_> {
-    fn from_raw_parts(ptr: *const u8) -> Self {
-        // 直接从指针拷贝
-        let res = unsafe {
-            let mut res = MaybeUninit::<Self>::uninit();
-            core::ptr::copy_nonoverlapping(
-                ptr,
-                res.as_mut_ptr() as *mut _,
-                core::mem::size_of::<Self>(),
-            );
-            res.assume_init()
-        };
-        // 初始化
-        res.0.cursor.operate_on(res.0.dtb, |data| {
-            let mut i = data.len() - 1;
-            for j in (0..data.len() - 1).rev() {
-                if data[j] == b'\0' {
-                    data[i] = (i - j - 1) as _;
-                    i = j;
-                }
-            }
-            data[i] = i as u8;
-        });
-        res
-    }
-
     /// 构造一个可访问每个字符串的迭代器。
     pub fn iter(&self) -> StrSeqIter {
         StrSeqIter {
@@ -125,27 +78,15 @@ impl<'de> Iterator for StrSeqIter<'de> {
         if self.data.is_empty() {
             None
         } else {
-            let len = *self.data.last().unwrap() as usize;
-            let (a, b) = self.data.split_at(self.data.len() - len - 1);
-            self.data = a;
-            Some(unsafe { core::str::from_utf8_unchecked(&b[..len]) })
+            let pos = self
+                .data
+                .iter()
+                .position(|&x| x == b'\0')
+                .unwrap_or(self.data.len());
+            let (a, b) = self.data.split_at(pos + 1);
+            self.data = b;
+            // Remove \0 at end
+            Some(unsafe { core::str::from_utf8_unchecked(&a[..a.len() - 1]) })
         }
-    }
-}
-
-impl Drop for StrSeq<'_> {
-    fn drop(&mut self) {
-        self.0.cursor.operate_on(self.0.dtb, |data| {
-            let mut idx = data.len() - 1;
-            loop {
-                let len = data[idx] as usize;
-                data[idx] = 0;
-                if idx > len {
-                    idx -= len + 1;
-                } else {
-                    break;
-                }
-            }
-        })
     }
 }

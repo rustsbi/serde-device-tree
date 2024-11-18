@@ -246,16 +246,6 @@ impl PropCursor {
             ))
         }
     }
-
-    pub fn operate_on(&self, dtb: RefDtb<'_>, f: impl FnOnce(&mut [u8])) {
-        if let [_, len_data, _, data @ ..] = &mut dtb.borrow_mut().structure[self.0..] {
-            f(unsafe {
-                core::slice::from_raw_parts_mut(data.as_mut_ptr() as _, len_data.as_usize())
-            });
-        } else {
-            todo!()
-        }
-    }
 }
 
 #[derive(Debug)]

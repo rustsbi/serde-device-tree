@@ -239,37 +239,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
         if name == super::VALUE_DESERIALIZER_NAME {
             return visitor.visit_newtype_struct(self);
         }
-        match self.cursor {
-            ValueCursor::Prop(_, cursor) => match name {
-                "StrSeq" => {
-                    let inner = super::str_seq::Inner {
-                        dtb: self.dtb,
-                        cursor,
-                    };
-                    visitor.visit_borrowed_bytes(unsafe {
-                        core::slice::from_raw_parts(
-                            &inner as *const _ as *const u8,
-                            core::mem::size_of_val(&inner),
-                        )
-                    })
-                }
-                "Reg" => {
-                    let inner = super::reg::Inner {
-                        dtb: self.dtb,
-                        reg: self.reg,
-                        cursor,
-                    };
-                    visitor.visit_borrowed_bytes(unsafe {
-                        core::slice::from_raw_parts(
-                            &inner as *const _ as *const u8,
-                            core::mem::size_of_val(&inner),
-                        )
-                    })
-                }
-                _ => visitor.visit_newtype_struct(self),
-            },
-            ValueCursor::Body(_) => visitor.visit_newtype_struct(self),
-        }
+        unreachable!("unknown newtype struct");
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value, Self::Error>

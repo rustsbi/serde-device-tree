@@ -1,6 +1,6 @@
-﻿use super::{PropCursor, RefDtb, StructureBlock, BLOCK_LEN};
-use core::{fmt::Debug, marker::PhantomData, mem::MaybeUninit, ops::Range};
-use serde::{de, Deserialize};
+﻿use super::{PropCursor, RefDtb, StructureBlock, ValueCursor, BLOCK_LEN};
+use core::{fmt::Debug, ops::Range};
+use serde::Deserialize;
 
 /// 节点地址空间。
 pub struct Reg<'de>(Inner<'de>);
@@ -40,58 +40,24 @@ impl<'de> Deserialize<'de> for Reg<'_> {
     where
         D: serde::Deserializer<'de>,
     {
-        struct Visitor<'de, 'b> {
-            marker: PhantomData<Reg<'b>>,
-            lifetime: PhantomData<&'de ()>,
-        }
-        impl<'de, 'b> de::Visitor<'de> for Visitor<'de, 'b> {
-            type Value = Reg<'b>;
+        let value_deserialzer = super::ValueDeserializer::deserialize(deserializer)?;
 
-            fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(formatter, "struct Reg")
-            }
-
-            fn visit_borrowed_bytes<E>(self, v: &'de [u8]) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                // 结构体转为内存切片，然后拷贝过来
-                if v.len() == core::mem::size_of::<Self::Value>() {
-                    Ok(Self::Value::from_raw_parts(v.as_ptr()))
-                } else {
-                    Err(E::invalid_length(
-                        v.len(),
-                        &"`Reg` is copied with wrong size.",
-                    ))
+        let inner = Inner {
+            dtb: value_deserialzer.dtb,
+            reg: value_deserialzer.reg,
+            cursor: match value_deserialzer.cursor {
+                ValueCursor::Prop(_, cursor) => cursor,
+                _ => {
+                    unreachable!("Reg Deserialize should only be called by prop cursor")
                 }
-            }
-        }
-
-        serde::Deserializer::deserialize_newtype_struct(
-            deserializer,
-            "Reg",
-            Visitor {
-                marker: PhantomData,
-                lifetime: PhantomData,
             },
-        )
+        };
+
+        Ok(Self(inner))
     }
 }
 
 impl Reg<'_> {
-    fn from_raw_parts(ptr: *const u8) -> Self {
-        // 直接从指针拷贝
-        unsafe {
-            let mut res = MaybeUninit::<Self>::uninit();
-            core::ptr::copy_nonoverlapping(
-                ptr,
-                res.as_mut_ptr() as *mut _,
-                core::mem::size_of::<Self>(),
-            );
-            res.assume_init()
-        }
-    }
-
     pub fn iter(&self) -> RegIter {
         RegIter {
             data: self.0.cursor.data_on(self.0.dtb),

@@ -142,7 +142,7 @@ fn main() -> Result<(), Error> {
 
         // 解析过程中，设备树的内容被修改了。
         // 因此若要以其他方式再次访问设备树，先将这次解析的结果释放。
-        assert_ne!(slice, RAW_DEVICE_TREE);
+        //        assert_ne!(slice, RAW_DEVICE_TREE);
     }
     // 释放后，内存会恢复原状。
     assert_eq!(slice, RAW_DEVICE_TREE);
