@@ -38,7 +38,7 @@ impl<'de> Deserialize<'de> for StrSeq<'_> {
             cursor: match value_deserialzer.cursor {
                 ValueCursor::Prop(_, cursor) => cursor,
                 _ => {
-                    unreachable!("Reg Deserialize should only be called by prop cursor")
+                    unreachable!("StrSeq Deserialize should only be called by prop cursor")
                 }
             },
         };
