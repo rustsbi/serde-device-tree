@@ -1,4 +1,4 @@
-﻿use super::{BodyCursor, Cursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
+use super::{BodyCursor, Cursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
 use core::{fmt::Debug, marker::PhantomData};
 use serde::de::SeqAccess;
 use serde::{de, Deserialize};
@@ -63,9 +63,7 @@ impl<'de> Deserialize<'de> for NodeSeq<'_> {
                     Cursor::Title(c) => {
                         let (name, _) = c.split_on(starter.dtb);
 
-                        let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
-                        let name_bytes = &name.as_bytes()[..pre_len];
-                        let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
+                        let (name, _) = name.split_once('@').unwrap_or((name, ""));
                         Ok(NodeSeq {
                             name,
                             count,
@@ -137,14 +135,8 @@ impl<'de> Iterator for NodeSeqIter<'de, '_> {
                     let (full_name, _) = c.split_on(self.de.dtb);
                     let (node, next) = c.take_node_on(self.de.dtb, full_name);
 
-                    let pre_len = full_name
-                        .as_bytes()
-                        .iter()
-                        .take_while(|b| **b != b'@')
-                        .count();
-                    let name_bytes = &full_name.as_bytes()[..pre_len];
-                    let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
-                    if self.seq.name != name {
+                    let (pre_name, suf_name) = full_name.split_once('@').unwrap_or((full_name, ""));
+                    if self.seq.name != pre_name {
                         return None;
                     }
 
@@ -154,7 +146,7 @@ impl<'de> Iterator for NodeSeqIter<'de, '_> {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
                         body: node,
-                        at: &full_name[pre_len + 1..],
+                        at: suf_name,
                     })
                 }
                 _ => None,
