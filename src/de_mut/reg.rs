@@ -24,8 +24,8 @@ pub struct RegRegion(pub Range<usize>);
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub(super) struct RegConfig {
-    pub address_cells: u32,
-    pub size_cells: u32,
+    pub address_cells: usize,
+    pub size_cells: usize,
 }
 
 impl RegConfig {
@@ -87,21 +87,28 @@ impl Iterator for RegIter<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         let len = BLOCK_LEN * (self.config.address_cells + self.config.size_cells) as usize;
         if self.data.len() >= len {
-            let mut block = self.data.as_ptr() as *const StructureBlock;
-            self.data = &self.data[len..];
+            let (current_block, data) = self.data.split_at(len);
+            self.data = data;
             let mut base = 0;
             let mut len = 0;
+            let mut block_id = 0;
             for _ in 0..self.config.address_cells {
-                unsafe {
-                    base = (base << 32) | (*block).as_usize();
-                    block = block.offset(1);
-                }
+                base = (base << 32)
+                    | u32::from_be_bytes(
+                        current_block[block_id * 4..(block_id + 1) * 4]
+                            .try_into()
+                            .unwrap(),
+                    ) as usize;
+                block_id += 1;
             }
             for _ in 0..self.config.size_cells {
-                unsafe {
-                    len = (len << 32) | (*block).as_usize();
-                    block = block.offset(1);
-                }
+                len = (len << 32)
+                    | u32::from_be_bytes(
+                        current_block[block_id * 4..(block_id + 1) * 4]
+                            .try_into()
+                            .unwrap(),
+                    ) as usize;
+                block_id += 1;
             }
             Some(RegRegion(base..base + len))
         } else {

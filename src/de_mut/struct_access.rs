@@ -84,10 +84,10 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     self.de.cursor = ValueCursor::Body(next);
                     match name {
                         "#address-cells" => {
-                            self.de.reg.address_cells = c.map_u32_on(self.de.dtb)?;
+                            self.de.reg.address_cells = c.map_u32_on(self.de.dtb)? as usize;
                         }
                         "#size-cells" => {
-                            self.de.reg.size_cells = c.map_u32_on(self.de.dtb)?;
+                            self.de.reg.size_cells = c.map_u32_on(self.de.dtb)? as usize;
                         }
                         _ => {}
                     }

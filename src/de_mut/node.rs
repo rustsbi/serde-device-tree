@@ -4,6 +4,8 @@ use core::marker::PhantomData;
 use serde::de::MapAccess;
 use serde::{de, Deserialize};
 
+// TODO: Spec 2.3.5 said that we should not inherited from ancestors and the size-cell &
+// address-cells should only used for current node's children.
 #[allow(unused)]
 #[derive(Clone)]
 pub struct Node<'de> {
