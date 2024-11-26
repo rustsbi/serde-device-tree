@@ -11,6 +11,7 @@ use serde::{de, Deserialize};
 pub struct Node<'de> {
     dtb: RefDtb<'de>,
     reg: RegConfig,
+    cursor: BodyCursor,
     props_start: Option<BodyCursor>,
     nodes_start: Option<BodyCursor>,
 }
@@ -48,6 +49,15 @@ pub struct PropItem<'de> {
 }
 
 impl<'de> Node<'de> {
+    pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
+        use super::ValueCursor;
+        T::deserialize(&mut ValueDeserializer {
+            dtb: self.dtb,
+            reg: self.reg,
+            cursor: ValueCursor::Body(self.cursor),
+        })
+        .unwrap()
+    }
     // TODO: Maybe use BTreeMap when have alloc
     /// 获得节点迭代器。
     pub fn nodes<'b>(&'b self) -> NodeIter<'de, 'b> {
@@ -179,10 +189,17 @@ impl<'de> Deserialize<'de> for Node<'_> {
                 let mut reg: Option<RegConfig> = None;
                 let mut props_start: Option<BodyCursor> = None;
                 let mut nodes_start: Option<BodyCursor> = None;
+                let mut self_cursor: Option<BodyCursor> = None;
                 while let Some((key, value)) = access.next_entry::<&str, ValueDeserializer<'b>>()? {
                     dtb = Some(value.dtb);
                     reg = Some(value.reg);
                     if key == "/" {
+                        self_cursor = match value.cursor {
+                            ValueCursor::Body(cursor) => Some(cursor),
+                            ValueCursor::Prop(_, _) => {
+                                unreachable!("root of NodeSeq shouble be body cursor")
+                            }
+                        };
                         continue;
                     }
                     match value.cursor {
@@ -202,6 +219,7 @@ impl<'de> Deserialize<'de> for Node<'_> {
                 Ok(Node {
                     dtb: dtb.unwrap(),
                     reg: reg.unwrap(),
+                    cursor: self_cursor.unwrap(),
                     nodes_start,
                     props_start,
                 })

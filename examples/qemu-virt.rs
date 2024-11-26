@@ -103,7 +103,8 @@ fn main() -> Result<(), Error> {
 
     {
         // 解析！
-        let t: Tree = from_raw_mut(&dtb).unwrap();
+        let root: Node = from_raw_mut(&dtb).unwrap();
+        let t: Tree = root.deserialize();
 
         println!("model = {:?}", t.model);
         println!("compatible = {:?}", t.compatible);
