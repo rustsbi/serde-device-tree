@@ -129,16 +129,18 @@ impl TitleCursor {
     /// 切分节点名。
     pub fn split_on<'de>(&self, dtb: RefDtb<'de>) -> (&'de str, BodyCursor) {
         let mut index = self.0 + 1;
+        let mut len = 0;
 
         let structure = &dtb.borrow().structure;
-        let ptr = structure[index..].as_ptr() as *const u8;
         while let Some(block) = structure.get(index) {
             index += 1;
             if block.is_end_of_str() {
                 let end = block.str_end();
-                let s = unsafe { core::slice::from_raw_parts(ptr, end.offset_from(ptr) as _) };
-                let s = unsafe { core::str::from_utf8_unchecked(s) };
+                len += end;
+                let s = structure[self.0 + 1].lead_str(len);
                 return (s, AnyCursor(index, PhantomData));
+            } else {
+                len += 4;
             }
         }
         todo!()
@@ -158,12 +160,7 @@ impl TitleCursor {
             body.skip_str_on(dtb);
             body.escape_from(dtb);
             if let Cursor::Title(c) = body.move_on(dtb) {
-                let s = unsafe {
-                    core::slice::from_raw_parts(
-                        structure[c.0 + 1..].as_ptr() as *const u8,
-                        name_bytes.len() + 1,
-                    )
-                };
+                let s = structure[c.0 + 1].lead_slice(name_bytes.len() + 1);
                 if let [name @ .., b'@'] = s {
                     if name == name_bytes {
                         body.0 += 1 + name_skip;
@@ -213,7 +210,7 @@ impl PropCursor {
 
     pub fn data_on<'a>(&self, dtb: RefDtb<'a>) -> &'a [u8] {
         if let [_, len_data, _, data @ ..] = &dtb.borrow().structure[self.0..] {
-            unsafe { core::slice::from_raw_parts(data.as_ptr() as _, len_data.as_usize()) }
+            data[0].lead_slice(len_data.as_usize())
         } else {
             todo!()
         }
@@ -221,7 +218,7 @@ impl PropCursor {
 
     pub fn map_on<T>(&self, dtb: RefDtb<'_>, f: impl FnOnce(&[u8]) -> T) -> T {
         if let [_, len_data, _, data @ ..] = &dtb.borrow().structure[self.0..] {
-            f(unsafe { core::slice::from_raw_parts(data.as_ptr() as _, len_data.as_usize()) })
+            f(data[0].lead_slice(len_data.as_usize()))
         } else {
             todo!()
         }
@@ -244,16 +241,6 @@ impl PropCursor {
                 (4 * structure.len()) as _,
                 self.file_index_on(dtb),
             ))
-        }
-    }
-
-    pub fn operate_on(&self, dtb: RefDtb<'_>, f: impl FnOnce(&mut [u8])) {
-        if let [_, len_data, _, data @ ..] = &mut dtb.borrow_mut().structure[self.0..] {
-            f(unsafe {
-                core::slice::from_raw_parts_mut(data.as_mut_ptr() as _, len_data.as_usize())
-            });
-        } else {
-            todo!()
         }
     }
 }

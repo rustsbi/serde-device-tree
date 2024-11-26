@@ -4,11 +4,14 @@ use core::marker::PhantomData;
 use serde::de::MapAccess;
 use serde::{de, Deserialize};
 
+// TODO: Spec 2.3.5 said that we should not inherited from ancestors and the size-cell &
+// address-cells should only used for current node's children.
 #[allow(unused)]
 #[derive(Clone)]
 pub struct Node<'de> {
     dtb: RefDtb<'de>,
     reg: RegConfig,
+    cursor: BodyCursor,
     props_start: Option<BodyCursor>,
     nodes_start: Option<BodyCursor>,
 }
@@ -16,7 +19,7 @@ pub struct Node<'de> {
 /// 节点迭代器。
 pub struct NodeIter<'de, 'b> {
     node: &'b Node<'de>,
-    cursor: BodyCursor,
+    cursor: Option<BodyCursor>,
     i: usize,
 }
 
@@ -31,7 +34,7 @@ pub struct NodeItem<'de> {
 /// 属性迭代器。
 pub struct PropIter<'de, 'b> {
     node: &'b Node<'de>,
-    cursor: BodyCursor,
+    cursor: Option<BodyCursor>,
     i: usize,
 }
 
@@ -46,23 +49,37 @@ pub struct PropItem<'de> {
 }
 
 impl<'de> Node<'de> {
+    pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
+        use super::ValueCursor;
+        T::deserialize(&mut ValueDeserializer {
+            dtb: self.dtb,
+            reg: self.reg,
+            cursor: ValueCursor::Body(self.cursor),
+        })
+        .unwrap()
+    }
     // TODO: Maybe use BTreeMap when have alloc
     /// 获得节点迭代器。
-    pub fn nodes<'b>(&'b self) -> Option<NodeIter<'de, 'b>> {
-        self.nodes_start.map(|node_cursor| NodeIter {
+    pub fn nodes<'b>(&'b self) -> NodeIter<'de, 'b> {
+        NodeIter {
             node: self,
-            cursor: node_cursor,
+            cursor: self.nodes_start,
             i: 0,
-        })
+        }
     }
 
     /// 获得属性迭代器。
-    pub fn props<'b>(&'b self) -> Option<PropIter<'de, 'b>> {
-        self.props_start.map(|node_cursor| PropIter {
+    pub fn props<'b>(&'b self) -> PropIter<'de, 'b> {
+        PropIter {
             node: self,
-            cursor: node_cursor,
+            cursor: self.props_start,
             i: 0,
-        })
+        }
+    }
+
+    /// 尝试获得指定属性
+    pub fn get_prop<'b>(&'b self, name: &str) -> Option<PropItem<'b>> {
+        self.props().find(|prop| prop.get_name() == name)
     }
 }
 
@@ -70,30 +87,26 @@ impl Debug for Node<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let props = self.props();
         write!(f, "Props: [")?;
-        if let Some(s) = props {
-            let mut first_written = true;
-            for prop in s {
-                if first_written {
-                    write!(f, "\"{}\"", prop.get_name())?;
-                    first_written = false;
-                } else {
-                    write!(f, ",\"{}\"", prop.get_name())?;
-                }
+        let mut first_written = true;
+        for prop in props {
+            if first_written {
+                write!(f, "\"{}\"", prop.get_name())?;
+                first_written = false;
+            } else {
+                write!(f, ",\"{}\"", prop.get_name())?;
             }
         }
         writeln!(f, "]")?;
 
         let children = self.nodes();
         write!(f, "Children: [")?;
-        if let Some(s) = children {
-            let mut first_written = true;
-            for child in s {
-                if first_written {
-                    write!(f, "\"{}\"", child.get_full_name())?;
-                    first_written = false;
-                } else {
-                    write!(f, ",\"{}\"", child.get_full_name())?;
-                }
+        let mut first_written = true;
+        for child in children {
+            if first_written {
+                write!(f, "\"{}\"", child.get_full_name())?;
+                first_written = false;
+            } else {
+                write!(f, ",\"{}\"", child.get_full_name())?;
             }
         }
         writeln!(f, "]")?;
@@ -106,19 +119,23 @@ impl<'de> Iterator for NodeIter<'de, '_> {
     type Item = NodeItem<'de>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.i += 1;
-        let dtb = self.node.dtb;
-        if let Cursor::Title(c) = self.cursor.move_on(dtb) {
-            let (name, _) = c.split_on(dtb);
-            let (node_cursor, next) = c.take_node_on(dtb, name);
-            let res = Some(Self::Item {
-                dtb,
-                reg: self.node.reg,
-                node: node_cursor,
-                name,
-            });
-            self.cursor = next;
-            res
+        if let Some(ref mut cursor) = self.cursor {
+            self.i += 1;
+            let dtb = self.node.dtb;
+            if let Cursor::Title(c) = cursor.move_on(dtb) {
+                let (name, _) = c.split_on(dtb);
+                let (node_cursor, next) = c.take_node_on(dtb, name);
+                let res = Some(Self::Item {
+                    dtb,
+                    reg: self.node.reg,
+                    node: node_cursor,
+                    name,
+                });
+                *cursor = next;
+                res
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -129,19 +146,23 @@ impl<'de> Iterator for PropIter<'de, '_> {
     type Item = PropItem<'de>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.i += 1;
-        let dtb = self.node.dtb;
-        if let Cursor::Prop(c) = self.cursor.move_on(dtb) {
-            let (name, next) = c.name_on(dtb);
-            let res = Some(Self::Item {
-                dtb,
-                body: self.cursor,
-                reg: self.node.reg,
-                prop: c,
-                name,
-            });
-            self.cursor = next;
-            res
+        if let Some(ref mut cursor) = self.cursor {
+            self.i += 1;
+            let dtb = self.node.dtb;
+            if let Cursor::Prop(c) = cursor.move_on(dtb) {
+                let (name, next) = c.name_on(dtb);
+                let res = Some(Self::Item {
+                    dtb,
+                    body: *cursor,
+                    reg: self.node.reg,
+                    prop: c,
+                    name,
+                });
+                *cursor = next;
+                res
+            } else {
+                None
+            }
         } else {
             None
         }
@@ -173,10 +194,17 @@ impl<'de> Deserialize<'de> for Node<'_> {
                 let mut reg: Option<RegConfig> = None;
                 let mut props_start: Option<BodyCursor> = None;
                 let mut nodes_start: Option<BodyCursor> = None;
+                let mut self_cursor: Option<BodyCursor> = None;
                 while let Some((key, value)) = access.next_entry::<&str, ValueDeserializer<'b>>()? {
                     dtb = Some(value.dtb);
                     reg = Some(value.reg);
                     if key == "/" {
+                        self_cursor = match value.cursor {
+                            ValueCursor::Body(cursor) => Some(cursor),
+                            ValueCursor::Prop(_, _) => {
+                                unreachable!("root of NodeSeq shouble be body cursor")
+                            }
+                        };
                         continue;
                     }
                     match value.cursor {
@@ -196,6 +224,7 @@ impl<'de> Deserialize<'de> for Node<'_> {
                 Ok(Node {
                     dtb: dtb.unwrap(),
                     reg: reg.unwrap(),
+                    cursor: self_cursor.unwrap(),
                     nodes_start,
                     props_start,
                 })
@@ -257,5 +286,30 @@ impl<'de> PropItem<'de> {
             cursor: ValueCursor::Prop(self.body, self.prop),
         })
         .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{buildin::Node, from_raw_mut, Dtb, DtbPtr};
+    const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/hifive-unmatched-a00.dtb");
+    const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
+    #[repr(align(8))]
+    struct AlignedBuffer {
+        pub data: [u8; RAW_DEVICE_TREE.len()],
+    }
+    #[test]
+    fn test_find_prop() {
+        let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+            data: [0; BUFFER_SIZE],
+        });
+        aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
+        let mut slice = aligned_data.data.to_vec();
+        let ptr = DtbPtr::from_raw(slice.as_mut_ptr()).unwrap();
+        let dtb = Dtb::from(ptr).share();
+
+        let node: Node = from_raw_mut(&dtb).unwrap();
+        let prop = node.get_prop("compatible");
+        assert!(prop.is_some());
     }
 }

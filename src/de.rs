@@ -31,7 +31,7 @@ use serde::de;
 /// # Example
 ///
 /// ```
-/// # static RAW_DEVICE_TREE: &'static [u8] = include_bytes!("../examples/hifive-unmatched-a00.dtb");
+/// # const RAW_DEVICE_TREE: &'static [u8] = include_bytes!("../examples/hifive-unmatched-a00.dtb");
 /// # const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
 /// # #[repr(align(4))]
 /// # struct AlignedBuffer {
@@ -521,7 +521,7 @@ mod tests {
     #[cfg(any(feature = "std", feature = "alloc"))]
     #[test]
     fn error_invalid_magic() {
-        static DEVICE_TREE: &[u8] = &[0x11, 0x22, 0x33, 0x44]; // not device tree blob format
+        const DEVICE_TREE: &[u8] = &[0x11, 0x22, 0x33, 0x44]; // not device tree blob format
         const DEVICE_TREE_LEN: usize = DEVICE_TREE.len();
         #[repr(align(8))]
         struct AlignedBuffer {

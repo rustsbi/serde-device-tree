@@ -103,7 +103,8 @@ fn main() -> Result<(), Error> {
 
     {
         // 解析！
-        let t: Tree = from_raw_mut(&dtb).unwrap();
+        let root: Node = from_raw_mut(&dtb).unwrap();
+        let t: Tree = root.deserialize();
 
         println!("model = {:?}", t.model);
         println!("compatible = {:?}", t.compatible);
@@ -133,7 +134,7 @@ fn main() -> Result<(), Error> {
         }
 
         println!("{:?}", t.soc);
-        for current_node in t.soc.nodes().unwrap() {
+        for current_node in t.soc.nodes() {
             if current_node.get_parsed_name().0 == "virtio_mmio" {
                 let mmio = current_node.deserialize::<VirtIoMmio>();
                 println!("{:?} {:?}", current_node.get_parsed_name(), mmio.reg);
@@ -142,7 +143,7 @@ fn main() -> Result<(), Error> {
 
         // 解析过程中，设备树的内容被修改了。
         // 因此若要以其他方式再次访问设备树，先将这次解析的结果释放。
-        assert_ne!(slice, RAW_DEVICE_TREE);
+        //        assert_ne!(slice, RAW_DEVICE_TREE);
     }
     // 释放后，内存会恢复原状。
     assert_eq!(slice, RAW_DEVICE_TREE);

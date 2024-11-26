@@ -56,9 +56,9 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                 Cursor::Title(c) => {
                     let (name, _) = c.split_on(self.de.dtb);
 
-                    let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
+                    let (pre_name, _) = name.split_once('@').unwrap_or((name, ""));
                     // 子节点名字不带 @ 或正在解析 Node 类型
-                    if pre_len == name.as_bytes().len() || check_contains(name) {
+                    if pre_name == name || check_contains(name) {
                         let (node, next) = c.take_node_on(self.de.dtb, name);
                         self.de.cursor = ValueCursor::Body(next);
                         if check_contains(name) {
@@ -68,13 +68,11 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     }
                     // @ 之前的部分是真正的名字，用这个名字搜索连续的一组
                     else {
-                        let name_bytes = &name.as_bytes()[..pre_len];
-                        let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
-                        let (group, _, next) = c.take_group_on(self.de.dtb, name);
+                        let (group, _, next) = c.take_group_on(self.de.dtb, pre_name);
                         self.de.cursor = ValueCursor::Body(next);
-                        if check_contains(name) {
+                        if check_contains(pre_name) {
                             self.temp = Temp::Group(group);
-                            break name;
+                            break pre_name;
                         }
                     }
                 }
@@ -84,10 +82,10 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     self.de.cursor = ValueCursor::Body(next);
                     match name {
                         "#address-cells" => {
-                            self.de.reg.address_cells = c.map_u32_on(self.de.dtb)?;
+                            self.de.reg.address_cells = c.map_u32_on(self.de.dtb)? as usize;
                         }
                         "#size-cells" => {
-                            self.de.reg.size_cells = c.map_u32_on(self.de.dtb)?;
+                            self.de.reg.size_cells = c.map_u32_on(self.de.dtb)? as usize;
                         }
                         _ => {}
                     }

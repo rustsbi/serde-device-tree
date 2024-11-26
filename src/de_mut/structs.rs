@@ -19,21 +19,23 @@ impl TryFrom<usize> for DtbPtr {
 }
 
 impl DtbPtr {
+    const fn get_header(ptr: &*mut u8) -> &Header {
+        unsafe { &*(*ptr as *const Header) }
+    }
+
     /// 验证指针指向的设备树，并构造 `DtbPtr`。
     pub fn from_raw(ptr: *mut u8) -> Result<Self, DtError> {
-        let ptr = ptr as usize;
-        if ptr & (ALIGN - 1) != 0 {
-            Err(DtError::unaligned(ptr))
+        if (ptr as usize) & (ALIGN - 1) != 0 {
+            Err(DtError::unaligned(ptr as _))
         } else {
-            unsafe { &*(ptr as *const Header) }
-                .verify()
-                .map(|_| Self(ptr))
+            { Self::get_header(&ptr) }.verify().map(|_| Self(ptr as _))
         }
     }
 
     /// 计算能容纳整个设备树的最小对齐。
     pub const fn align(&self) -> usize {
-        let header = unsafe { &*(self.0 as *const Header) };
+        let ptr = self.0 as *mut u8;
+        let header = Self::get_header(&ptr);
         let len = u32::from_be(header.total_size) as usize;
         let mut res = ALIGN;
         while res < len {
@@ -76,14 +78,13 @@ impl StructureBlock {
     }
 
     /// '\0' 结尾字符串的实际结尾。
-    pub fn str_end(&self) -> *const u8 {
-        let remnant = match self.0.to_ne_bytes() {
+    pub fn str_end(&self) -> usize {
+        match self.0.to_ne_bytes() {
             [0, _, _, _] => 0,
             [_, 0, _, _] => 1,
             [_, _, 0, _] => 2,
             [_, _, _, _] => 3,
-        };
-        unsafe { (self as *const _ as *const u8).add(remnant) }
+        }
     }
 
     /// 转换为描述字节长度或偏移的数值。
@@ -93,10 +94,15 @@ impl StructureBlock {
 
     /// 构造字节切片。
     ///
-    /// TODO
-    #[allow(unused)]
+    /// ### Safety
+    ///
+    /// 保证 当前位置 + 长度 不会超过文件大小。
     pub fn lead_slice<'a>(&self, len: usize) -> &'a [u8] {
         unsafe { core::slice::from_raw_parts(self as *const _ as *const u8, len) }
+    }
+    pub fn lead_str<'a>(&self, len: usize) -> &'a str {
+        let slice = self.lead_slice(len);
+        unsafe { core::str::from_utf8_unchecked(slice) }
     }
 }
 
