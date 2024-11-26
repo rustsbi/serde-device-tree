@@ -18,14 +18,7 @@ impl Node<'_> {
                 Some(node) => node,
                 None => break,
             };
-            let mut nodes = match node.nodes() {
-                Some(nodes) => nodes,
-                None => {
-                    current_node = None;
-                    break;
-                }
-            };
-            let next_node_iter = nodes.find(|x| x.get_full_name() == current_name);
+            let next_node_iter = node.nodes().find(|x| x.get_full_name() == current_name);
             match next_node_iter {
                 None => current_node = None,
                 Some(iter) => {
@@ -43,11 +36,9 @@ impl Node<'_> {
         F: FnMut(&Node),
     {
         func(self);
-        if let Some(nodes) = self.nodes() {
-            for node in nodes {
-                let node = node.deserialize::<Node>();
-                node.search(func);
-            }
+        for node in self.nodes() {
+            let node = node.deserialize::<Node>();
+            node.search(func);
         }
     }
 }
@@ -92,10 +83,7 @@ mod tests {
 
         let node: Node = from_raw_mut(&dtb).unwrap();
         let node = node.find("/chosen").unwrap();
-        let result = node
-            .props()
-            .unwrap()
-            .find(|prop| prop.get_name() == "stdout-path");
+        let result = node.props().find(|prop| prop.get_name() == "stdout-path");
         match result {
             Some(iter) => {
                 if iter.deserialize::<StrSeq>().iter().next().unwrap() != "serial0" {

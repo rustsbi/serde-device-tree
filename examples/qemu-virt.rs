@@ -133,7 +133,7 @@ fn main() -> Result<(), Error> {
         }
 
         println!("{:?}", t.soc);
-        for current_node in t.soc.nodes().unwrap() {
+        for current_node in t.soc.nodes() {
             if current_node.get_parsed_name().0 == "virtio_mmio" {
                 let mmio = current_node.deserialize::<VirtIoMmio>();
                 println!("{:?} {:?}", current_node.get_parsed_name(), mmio.reg);
