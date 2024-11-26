@@ -76,6 +76,11 @@ impl<'de> Node<'de> {
             i: 0,
         }
     }
+
+    /// 尝试获得指定属性
+    pub fn get_prop<'b>(&'b self, name: &str) -> Option<PropItem<'b>> {
+        self.props().find(|prop| prop.get_name() == name)
+    }
 }
 
 impl Debug for Node<'_> {
@@ -281,5 +286,30 @@ impl<'de> PropItem<'de> {
             cursor: ValueCursor::Prop(self.body, self.prop),
         })
         .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{buildin::Node, from_raw_mut, Dtb, DtbPtr};
+    const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/hifive-unmatched-a00.dtb");
+    const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
+    #[repr(align(8))]
+    struct AlignedBuffer {
+        pub data: [u8; RAW_DEVICE_TREE.len()],
+    }
+    #[test]
+    fn test_find_prop() {
+        let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+            data: [0; BUFFER_SIZE],
+        });
+        aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
+        let mut slice = aligned_data.data.to_vec();
+        let ptr = DtbPtr::from_raw(slice.as_mut_ptr()).unwrap();
+        let dtb = Dtb::from(ptr).share();
+
+        let node: Node = from_raw_mut(&dtb).unwrap();
+        let prop = node.get_prop("compatible");
+        assert!(prop.is_some());
     }
 }
