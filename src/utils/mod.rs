@@ -1,8 +1,8 @@
-use crate::buildin::Node;
+use crate::buildin::{Node, StrSeq};
 
 impl Node<'_> {
-    /// Try to get a node by path
-    pub fn find(&self, path: &str) -> Option<Node> {
+    /// Try to get a node by a full-path.
+    fn raw_find(&self, path: &str) -> Option<Node> {
         // Direct return root node
         let mut current_node = Some(self.clone());
         if path == "/" {
@@ -29,6 +29,28 @@ impl Node<'_> {
         }
         current_node
     }
+    /// Try to get a node by path.
+    pub fn find(&self, path: &str) -> Option<Node> {
+        // Direct return root node
+        let current_node = Some(self.clone());
+        if path == "/" {
+            return current_node;
+        }
+        let (root, _) = path.split_at(1);
+        if root != "/" {
+            // Path name does not start with `/`, Check if the aliases.
+            if let Some(aliases) = self.raw_find("/aliases") {
+                if let Some(full_path) = aliases.get_prop(path) {
+                    // As spec 3.3 said, this prop value should be one string,
+                    // which is a full path ref to a node.
+                    let full_path = full_path.deserialize::<StrSeq>();
+                    return self.raw_find(full_path.iter().next().unwrap());
+                }
+            }
+            return None;
+        }
+        return self.raw_find(path);
+    }
 
     /// use depth-first search to traversal the tree, and exec func for each node
     pub fn search<F>(&self, func: &mut F)
@@ -51,12 +73,16 @@ mod tests {
     };
     const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/hifive-unmatched-a00.dtb");
     const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
-    #[repr(align(8))]
-    struct AlignedBuffer {
-        pub data: [u8; RAW_DEVICE_TREE.len()],
-    }
+
+    const RAW_DEVICE_TREE_WITH_ALIASES: &[u8] =
+        include_bytes!("../../examples/cv1812cp_milkv_duo256m_sd.dtb");
+    const BUFFER_SIZE_WITH_ALIASES: usize = RAW_DEVICE_TREE_WITH_ALIASES.len();
     #[test]
     fn test_search() {
+        #[repr(align(8))]
+        struct AlignedBuffer {
+            pub data: [u8; RAW_DEVICE_TREE.len()],
+        }
         let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
             data: [0; BUFFER_SIZE],
         });
@@ -73,21 +99,31 @@ mod tests {
     }
     #[test]
     fn test_find() {
+        #[repr(align(8))]
+        struct AlignedBuffer {
+            pub data: [u8; RAW_DEVICE_TREE_WITH_ALIASES.len()],
+        }
         let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
-            data: [0; BUFFER_SIZE],
+            data: [0; BUFFER_SIZE_WITH_ALIASES],
         });
-        aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
+        aligned_data.data[..BUFFER_SIZE_WITH_ALIASES]
+            .clone_from_slice(RAW_DEVICE_TREE_WITH_ALIASES);
         let mut slice = aligned_data.data.to_vec();
         let ptr = DtbPtr::from_raw(slice.as_mut_ptr()).unwrap();
         let dtb = Dtb::from(ptr).share();
 
         let node: Node = from_raw_mut(&dtb).unwrap();
-        let node = node.find("/chosen").unwrap();
-        let result = node.props().find(|prop| prop.get_name() == "stdout-path");
+        let chosen = node.find("/chosen").unwrap();
+        let result = chosen.props().find(|prop| prop.get_name() == "stdout-path");
         match result {
             Some(iter) => {
-                if iter.deserialize::<StrSeq>().iter().next().unwrap() != "serial0" {
+                let stdout_path = String::from(iter.deserialize::<StrSeq>().iter().next().unwrap());
+                if stdout_path != "serial0" {
                     panic!("wrong /chosen/stdout-path value");
+                }
+                match node.find(&stdout_path) {
+                    Some(_) => (),
+                    None => panic!("unable to find stdout-path node."),
                 }
             }
             None => panic!("failed to find /chosen/stdout-path"),
