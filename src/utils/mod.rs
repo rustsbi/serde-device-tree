@@ -121,8 +121,9 @@ mod tests {
                 if stdout_path != "serial0" {
                     panic!("wrong /chosen/stdout-path value");
                 }
-                if let None = node.find(&stdout_path) {
-                    panic!("unable to find stdout-path node.");
+                match node.find(&stdout_path) {
+                    Some(_) => (),
+                    None => panic!("unable to find stdout-path node."),
                 }
             }
             None => panic!("failed to find /chosen/stdout-path"),
