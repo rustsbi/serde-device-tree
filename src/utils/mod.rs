@@ -1,8 +1,10 @@
+pub mod chosen;
+
 use crate::buildin::{Node, StrSeq};
 
-impl Node<'_> {
+impl<'de> Node<'de> {
     /// Try to get a node by a full-path.
-    fn raw_find(&self, path: &str) -> Option<Node> {
+    fn raw_find<'b>(&'b self, path: &str) -> Option<Node<'de>> {
         // Direct return root node
         let mut current_node = Some(self.clone());
         if path == "/" {
@@ -30,7 +32,7 @@ impl Node<'_> {
         current_node
     }
     /// Try to get a node by path.
-    pub fn find(&self, path: &str) -> Option<Node> {
+    pub fn find<'b>(&'b self, path: &str) -> Option<Node<'de>> {
         // Direct return root node
         let current_node = Some(self.clone());
         if path == "/" {

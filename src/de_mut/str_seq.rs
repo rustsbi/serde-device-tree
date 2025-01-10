@@ -47,9 +47,9 @@ impl<'de> Deserialize<'de> for StrSeq<'_> {
     }
 }
 
-impl StrSeq<'_> {
+impl<'de> StrSeq<'de> {
     /// 构造一个可访问每个字符串的迭代器。
-    pub fn iter(&self) -> StrSeqIter {
+    pub fn iter<'b>(&'b self) -> StrSeqIter<'de> {
         StrSeqIter {
             data: self.0.cursor.data_on(self.0.dtb),
         }
