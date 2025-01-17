@@ -1,4 +1,5 @@
-﻿use super::{BodyCursor, Cursor};
+﻿use super::cursor::MultiNodeCursor;
+use super::{BodyCursor, Cursor};
 use super::{DtError, PropCursor, RefDtb, RegConfig};
 
 use core::marker::PhantomData;
@@ -6,8 +7,9 @@ use serde::{de, Deserialize};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ValueCursor {
-    Prop(BodyCursor, PropCursor),
     Body(BodyCursor),
+    Prop(BodyCursor, PropCursor),
+    Node(MultiNodeCursor),
 }
 
 #[derive(Clone, Copy)]
@@ -206,6 +208,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
                     visitor.visit_some(self)
                 }
             }
+            ValueCursor::Node(_) => visitor.visit_some(self),
             ValueCursor::Body(_) => visitor.visit_some(self),
         }
     }
@@ -247,25 +250,30 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
         V: de::Visitor<'de>,
     {
         use super::{StructAccess, StructAccessType, Temp};
-        match self.move_on() {
-            Cursor::Title(c) => {
-                let (name, _) = c.split_on(self.dtb);
-                let cursor = match self.cursor {
-                    ValueCursor::Body(cursor) => cursor,
-                    _ => unreachable!(""),
-                };
+        match self.cursor {
+            ValueCursor::Node(result) => {
+                let mut start_cursor = result.start_cursor;
+                match start_cursor.move_on(self.dtb) {
+                    Cursor::Title(c) => {
+                        let (name, _) = c.split_on(self.dtb);
 
-                let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
-                let name_bytes = &name.as_bytes()[..pre_len];
-                let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
+                        let pre_len = name.as_bytes().iter().take_while(|b| **b != b'@').count();
+                        let name_bytes = &name.as_bytes()[..pre_len];
+                        let name = unsafe { core::str::from_utf8_unchecked(name_bytes) };
 
-                visitor.visit_seq(StructAccess {
-                    access_type: StructAccessType::Seq(name),
-                    temp: Temp::Node(cursor, cursor),
-                    de: self,
-                })
+                        let de = self;
+                        de.cursor = ValueCursor::Body(start_cursor);
+
+                        visitor.visit_seq(StructAccess {
+                            access_type: StructAccessType::Seq(name),
+                            temp: Temp::Uninit,
+                            de,
+                        })
+                    }
+                    _ => unreachable!("seq request on a none seq cursor"),
+                }
             }
-            _ => unreachable!("seq request on a none seq cursor"),
+            _ => unreachable!("Seq request on a not-node cursor"),
         }
     }
 
@@ -293,14 +301,19 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
         V: de::Visitor<'de>,
     {
         use super::{StructAccess, StructAccessType, Temp};
-        if let ValueCursor::Body(cursor) = self.cursor {
-            return visitor.visit_map(StructAccess {
+        match self.cursor {
+            ValueCursor::Node(_) => visitor.visit_map(StructAccess {
                 access_type: StructAccessType::Map(false),
-                temp: Temp::Node(cursor, cursor),
+                temp: Temp::Uninit,
                 de: self,
-            });
-        };
-        unreachable!("Prop -> map")
+            }),
+            ValueCursor::Body(_) => visitor.visit_map(StructAccess {
+                access_type: StructAccessType::Map(false),
+                temp: Temp::Uninit,
+                de: self,
+            }),
+            ValueCursor::Prop(_, _) => unreachable!("Prop -> map"),
+        }
     }
 
     fn deserialize_struct<V>(
@@ -313,14 +326,19 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
         V: de::Visitor<'de>,
     {
         use super::{StructAccess, StructAccessType, Temp};
-        if let ValueCursor::Body(cursor) = self.cursor {
-            return visitor.visit_map(StructAccess {
+        match self.cursor {
+            ValueCursor::Node(_) => visitor.visit_map(StructAccess {
                 access_type: StructAccessType::Struct(fields),
-                temp: Temp::Node(cursor, cursor),
+                temp: Temp::Uninit,
                 de: self,
-            });
-        };
-        unreachable!("Prop -> struct {_name} {fields:?}")
+            }),
+            ValueCursor::Body(_) => visitor.visit_map(StructAccess {
+                access_type: StructAccessType::Struct(fields),
+                temp: Temp::Uninit,
+                de: self,
+            }),
+            ValueCursor::Prop(_, _) => unreachable!("Prop -> struct {_name}"),
+        }
     }
 
     fn deserialize_enum<V>(

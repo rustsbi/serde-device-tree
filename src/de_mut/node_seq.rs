@@ -133,19 +133,19 @@ impl<'de> Iterator for NodeSeqIter<'de, '_> {
                 // 子节点名字
                 Cursor::Title(c) => {
                     let (full_name, _) = c.split_on(self.de.dtb);
-                    let (node, next) = c.take_node_on(self.de.dtb, full_name);
+                    let node_reuslt = c.take_node_on(self.de.dtb, full_name);
 
                     let (pre_name, suf_name) = full_name.split_once('@').unwrap_or((full_name, ""));
                     if self.seq.name != pre_name {
                         return None;
                     }
 
-                    self.de.cursor = ValueCursor::Body(next);
+                    self.de.cursor = ValueCursor::Body(node_reuslt.next_cursor);
 
                     Some(Self::Item {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
-                        body: node,
+                        body: node_reuslt.start_cursor,
                         at: suf_name,
                     })
                 }

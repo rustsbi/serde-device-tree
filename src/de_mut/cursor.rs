@@ -28,6 +28,15 @@ pub enum MoveResult {
     Others,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(super) struct MultiNodeCursor {
+    pub start_cursor: BodyCursor,
+    pub next_cursor: BodyCursor,
+    pub skip_cursor: BodyCursor,
+    #[allow(unused)]
+    pub node_count: u32,
+}
+
 impl<T: Type> AnyCursor<T> {
     /// 移动 `n` 格。
     pub fn step_n(&mut self, len: usize) {
@@ -147,12 +156,13 @@ impl TitleCursor {
     }
 
     /// 生成组光标。
-    pub fn take_group_on(&self, dtb: RefDtb, name: &str) -> (BodyCursor, usize, BodyCursor) {
+    pub fn take_group_on(&self, dtb: RefDtb, name: &str) -> MultiNodeCursor {
         let name_bytes = name.as_bytes();
         let name_skip = align(name_bytes.len() + 1, BLOCK_LEN);
         let group = AnyCursor::<Body>(self.0, PhantomData);
 
-        let mut body = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
+        let title_body = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
+        let mut body = title_body;
         let mut len = 1;
 
         let structure = &dtb.borrow().structure;
@@ -171,19 +181,30 @@ impl TitleCursor {
             }
             break;
         }
-        (group, len, body)
+        MultiNodeCursor {
+            start_cursor: group,
+            next_cursor: body,
+            skip_cursor: title_body,
+            node_count: len,
+        }
     }
 
     /// 生成节点光标。
-    pub fn take_node_on(&self, dtb: RefDtb, name: &str) -> (BodyCursor, BodyCursor) {
+    pub fn take_node_on(&self, dtb: RefDtb, name: &str) -> MultiNodeCursor {
         let name_bytes = name.as_bytes();
         let name_skip = align(name_bytes.len() + 1, BLOCK_LEN);
+        let origin = AnyCursor::<Body>(self.0, PhantomData);
         let node = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
 
         let mut body = AnyCursor::<Body>(self.0 + 1 + name_skip, PhantomData);
 
         body.escape_from(dtb);
-        (node, body)
+        MultiNodeCursor {
+            start_cursor: origin,
+            next_cursor: body,
+            skip_cursor: node,
+            node_count: 1,
+        }
     }
 }
 

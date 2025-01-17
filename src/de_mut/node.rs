@@ -124,14 +124,14 @@ impl<'de> Iterator for NodeIter<'de, '_> {
             let dtb = self.node.dtb;
             if let Cursor::Title(c) = cursor.move_on(dtb) {
                 let (name, _) = c.split_on(dtb);
-                let (node_cursor, next) = c.take_node_on(dtb, name);
+                let node_cursor = c.take_node_on(dtb, name);
                 let res = Some(Self::Item {
                     dtb,
                     reg: self.node.reg,
-                    node: node_cursor,
+                    node: node_cursor.skip_cursor,
                     name,
                 });
-                *cursor = next;
+                *cursor = node_cursor.next_cursor;
                 res
             } else {
                 None
@@ -201,7 +201,7 @@ impl<'de> Deserialize<'de> for Node<'_> {
                     if key == "/" {
                         self_cursor = match value.cursor {
                             ValueCursor::Body(cursor) => Some(cursor),
-                            ValueCursor::Prop(_, _) => {
+                            _ => {
                                 unreachable!("root of NodeSeq shouble be body cursor")
                             }
                         };
@@ -213,11 +213,12 @@ impl<'de> Deserialize<'de> for Node<'_> {
                                 props_start = Some(cursor);
                             }
                         }
-                        ValueCursor::Body(cursor) => {
+                        ValueCursor::Node(cursor) => {
                             if nodes_start.is_none() {
-                                nodes_start = Some(cursor);
+                                nodes_start = Some(cursor.start_cursor);
                             }
                         }
+                        _ => unreachable!("unparsed(body) cursor"),
                     }
                 }
 
