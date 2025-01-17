@@ -201,6 +201,7 @@ impl<'de> Deserialize<'de> for Node<'_> {
                     if key == "/" {
                         self_cursor = match value.cursor {
                             ValueCursor::Body(cursor) => Some(cursor),
+                            ValueCursor::Node(result) => Some(result.next_cursor),
                             _ => {
                                 unreachable!("root of NodeSeq shouble be body cursor")
                             }

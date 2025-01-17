@@ -145,7 +145,7 @@ impl<'de> Iterator for NodeSeqIter<'de, '_> {
                     Some(Self::Item {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
-                        body: node_reuslt.start_cursor,
+                        body: node_reuslt.skip_cursor,
                         at: suf_name,
                     })
                 }
@@ -171,5 +171,86 @@ impl<'de> NodeSeqItem<'de> {
             cursor: ValueCursor::Body(self.body),
         })
         .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::buildin::{NodeSeq, Reg};
+    use crate::{from_raw_mut, Dtb, DtbPtr};
+    use serde_derive::Deserialize;
+
+    const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/bl808.dtb");
+    const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
+    const RAW_DEVICE_TREE_QEMU: &[u8] = include_bytes!("../../examples/qemu-virt.dtb");
+    const BUFFER_SIZE_QEMU: usize = RAW_DEVICE_TREE_QEMU.len();
+    #[derive(Deserialize)]
+    pub struct Tree<'a> {
+        /// Memory information.
+        pub memory: NodeSeq<'a>,
+    }
+    /// Memory range.
+    #[derive(Deserialize)]
+    #[serde(rename_all = "kebab-case")]
+    pub struct Memory<'a> {
+        pub reg: Reg<'a>,
+    }
+    #[test]
+    fn test_nodeseq_without_at() {
+        #[repr(align(8))]
+        struct AlignedBuffer {
+            pub data: [u8; RAW_DEVICE_TREE.len()],
+        }
+        let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+            data: [0; BUFFER_SIZE],
+        });
+        aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
+        let mut slice = aligned_data.data.to_vec();
+        let ptr = DtbPtr::from_raw(slice.as_mut_ptr()).unwrap();
+        let dtb = Dtb::from(ptr).share();
+
+        let t: Tree = from_raw_mut(&dtb).unwrap();
+        assert_eq!(t.memory.len(), 1);
+        let range = t
+            .memory
+            .iter()
+            .next()
+            .unwrap()
+            .deserialize::<Memory>()
+            .reg
+            .iter()
+            .next()
+            .unwrap()
+            .0;
+        assert_eq!(range, 1342177280..1408237568);
+    }
+    #[test]
+    fn test_nodeseq_with_at() {
+        #[repr(align(8))]
+        struct AlignedBuffer {
+            pub data: [u8; RAW_DEVICE_TREE_QEMU.len()],
+        }
+        let mut aligned_data: Box<AlignedBuffer> = Box::new(AlignedBuffer {
+            data: [0; BUFFER_SIZE_QEMU],
+        });
+        aligned_data.data[..BUFFER_SIZE_QEMU].clone_from_slice(RAW_DEVICE_TREE_QEMU);
+        let mut slice = aligned_data.data.to_vec();
+        let ptr = DtbPtr::from_raw(slice.as_mut_ptr()).unwrap();
+        let dtb = Dtb::from(ptr).share();
+
+        let t: Tree = from_raw_mut(&dtb).unwrap();
+        assert_eq!(t.memory.len(), 1);
+        let range = t
+            .memory
+            .iter()
+            .next()
+            .unwrap()
+            .deserialize::<Memory>()
+            .reg
+            .iter()
+            .next()
+            .unwrap()
+            .0;
+        assert_eq!(range, 2147483648..6442450944);
     }
 }
