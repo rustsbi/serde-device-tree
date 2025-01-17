@@ -51,7 +51,7 @@ impl<'de> Node<'de> {
             }
             return None;
         }
-        return self.raw_find(path);
+        self.raw_find(path)
     }
 
     /// use depth-first search to traversal the tree, and exec func for each node

@@ -1,3 +1,4 @@
+use super::cursor::MultiNodeCursor;
 use super::{BodyCursor, Cursor, PropCursor, ValueCursor, ValueDeserializer};
 use crate::error::Error as DtError;
 use serde::de;
@@ -21,8 +22,8 @@ pub struct StructAccess<'de, 'b> {
 /// 解析键（名字）时将确定值类型，保存 `Temp` 类型的状态。
 /// 根据状态分发值解析器。
 pub enum Temp {
-    Node(BodyCursor, BodyCursor),
-    Group(BodyCursor),
+    Uninit,
+    Nodes(MultiNodeCursor),
     Prop(BodyCursor, PropCursor),
 }
 
@@ -46,6 +47,12 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                 _ => true,
             }
         };
+        let origin_cursor = match self.de.cursor {
+            ValueCursor::Body(cursor) => cursor,
+            ValueCursor::Node(result) => result.skip_cursor,
+            _ => unreachable!("map access's cursor should always be body cursor"),
+        };
+        self.de.cursor = ValueCursor::Body(origin_cursor);
         let name = loop {
             let origin_cursor = match self.de.cursor {
                 ValueCursor::Body(cursor) => cursor,
@@ -59,19 +66,19 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     let (pre_name, _) = name.split_once('@').unwrap_or((name, ""));
                     // 子节点名字不带 @ 或正在解析 Node 类型
                     if pre_name == name || check_contains(name) {
-                        let (node, next) = c.take_node_on(self.de.dtb, name);
-                        self.de.cursor = ValueCursor::Body(next);
+                        let take_result = c.take_node_on(self.de.dtb, name);
+                        self.de.cursor = ValueCursor::Body(take_result.next_cursor);
                         if check_contains(name) {
-                            self.temp = Temp::Node(origin_cursor, node);
+                            self.temp = Temp::Nodes(take_result);
                             break name;
                         }
                     }
                     // @ 之前的部分是真正的名字，用这个名字搜索连续的一组
                     else {
-                        let (group, _, next) = c.take_group_on(self.de.dtb, pre_name);
-                        self.de.cursor = ValueCursor::Body(next);
+                        let take_result = c.take_group_on(self.de.dtb, pre_name);
+                        self.de.cursor = ValueCursor::Body(take_result.next_cursor);
                         if check_contains(pre_name) {
-                            self.temp = Temp::Group(group);
+                            self.temp = Temp::Nodes(take_result);
                             break pre_name;
                         }
                     }
@@ -120,29 +127,21 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
             }
         }
         match self.temp {
-            Temp::Node(cursor, node_cursor) => {
+            Temp::Nodes(ref result) => {
                 // 键是独立节点名字，递归
                 match self.access_type {
                     StructAccessType::Map(_) => seed.deserialize(&mut ValueDeserializer {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
-                        cursor: ValueCursor::Body(cursor),
+                        cursor: ValueCursor::Node(*result),
                     }),
                     StructAccessType::Struct(_) => seed.deserialize(&mut ValueDeserializer {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
-                        cursor: ValueCursor::Body(node_cursor),
+                        cursor: ValueCursor::Node(*result),
                     }),
                     _ => unreachable!(),
                 }
-            }
-            Temp::Group(cursor) => {
-                // 键是组名字，构造组反序列化器
-                seed.deserialize(&mut ValueDeserializer {
-                    dtb: self.de.dtb,
-                    reg: self.de.reg,
-                    cursor: ValueCursor::Body(cursor),
-                })
             }
             Temp::Prop(origin_cursor, cursor) => {
                 // 键是属性名字，构造属性反序列化器
@@ -151,6 +150,9 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     reg: self.de.reg,
                     cursor: ValueCursor::Prop(origin_cursor, cursor),
                 })
+            }
+            Temp::Uninit => {
+                unreachable!("find uninited result")
             }
         }
     }
@@ -168,7 +170,7 @@ impl<'de> de::SeqAccess<'de> for StructAccess<'de, '_> {
                 // 子节点名字
                 Cursor::Title(c) => {
                     let (name, _) = c.split_on(self.de.dtb);
-                    let (_, next) = c.take_node_on(self.de.dtb, name);
+                    let next = c.take_node_on(self.de.dtb, name).next_cursor;
                     let prev_cursor = match self.de.cursor {
                         ValueCursor::Body(cursor) => cursor,
                         _ => unreachable!(),
