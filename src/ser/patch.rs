@@ -78,4 +78,10 @@ impl<'de> PatchList<'de> {
             }
         });
     }
+
+    pub fn add_list(&self, depth: usize) -> impl Iterator<Item = &'de Patch<'de>> + use<'de> {
+        self.list.iter().filter(move |x| {
+            x.matched_depth.get() == depth && x.get_depth() == depth + 1 && x.parsed.get() == false
+        })
+    }
 }

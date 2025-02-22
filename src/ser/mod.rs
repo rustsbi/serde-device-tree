@@ -59,34 +59,14 @@ impl<'de> Serializer<'de> {
     }
 }
 
-impl<'a, 'de> serde::ser::SerializeMap for &'a mut Serializer<'de> {
-    type Ok = ();
-    type Error = Error;
-
-    fn serialize_key<T>(&mut self, _input: &T) -> Result<(), Self::Error>
+trait SerializeDynamicField<'de> {
+    fn serialize_dynamic_field<T>(&mut self, key: &'de str, value: &T) -> Result<(), Error>
     where
-        T: serde::ser::Serialize + ?Sized,
-    {
-        todo!("map_key");
-    }
-
-    fn serialize_value<T>(&mut self, _value: &T) -> Result<(), Self::Error>
-    where
-        T: serde::ser::Serialize + ?Sized,
-    {
-        todo!("map_value");
-    }
-
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!("map_end");
-    }
+        T: serde::ser::Serialize + ?Sized;
 }
 
-impl<'a, 'de> serde::ser::SerializeStruct for &'a mut Serializer<'de> {
-    type Ok = ();
-    type Error = Error;
-
-    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+impl<'a, 'de> SerializeDynamicField<'de> for &'a mut Serializer<'de> {
+    fn serialize_dynamic_field<T>(&mut self, key: &'de str, value: &T) -> Result<(), Error>
     where
         T: serde::ser::Serialize + ?Sized,
     {
@@ -127,9 +107,49 @@ impl<'a, 'de> serde::ser::SerializeStruct for &'a mut Serializer<'de> {
 
         Ok(())
     }
+}
+
+impl<'a, 'de> serde::ser::SerializeMap for &'a mut Serializer<'de> {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_key<T>(&mut self, _input: &T) -> Result<(), Self::Error>
+    where
+        T: serde::ser::Serialize + ?Sized,
+    {
+        todo!("map_key");
+    }
+
+    fn serialize_value<T>(&mut self, _value: &T) -> Result<(), Self::Error>
+    where
+        T: serde::ser::Serialize + ?Sized,
+    {
+        todo!("map_value");
+    }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
-        // TODO: patch type add
+        todo!("map_end");
+    }
+}
+
+impl<'a, 'de> serde::ser::SerializeStruct for &'a mut Serializer<'de> {
+    type Ok = ();
+    type Error = Error;
+
+    fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
+    where
+        T: serde::ser::Serialize + ?Sized,
+    {
+        self.serialize_dynamic_field(key, value)?;
+
+        Ok(())
+    }
+
+    fn end(mut self) -> Result<Self::Ok, Self::Error> {
+        for patch in self.patch_list.add_list(self.current_dep) {
+            let key = patch.get_depth_path(self.current_dep + 1);
+            self.serialize_dynamic_field(key, patch.data)?;
+        }
         self.dst.step_by_u32(FDT_END_NODE);
         Ok(())
     }
@@ -408,7 +428,7 @@ mod tests {
     use crate::common::*;
     use serde::ser::Serialize;
     use serde_derive::Serialize;
-    const MAX_SIZE: usize = 128 + 64;
+    const MAX_SIZE: usize = 128 + 64 + 32;
     #[test]
     fn base_ser_test() {
         #[derive(Serialize)]
@@ -616,6 +636,45 @@ mod tests {
                 hello: "replacement",
             };
             let patch = crate::ser::patch::Patch::new("/hello", &new_base as _);
+            let mut list = [patch];
+            let mut patch_list = crate::ser::PatchList::new(&mut list);
+            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
+            let base = Base {
+                hello: 0xdeedbeef,
+                base1: Base1 {
+                    hello: "Hello, World!",
+                },
+                hello2: 0x11223344,
+                base2: Base1 { hello: "Roger" },
+            };
+            base.serialize(&mut ser).unwrap();
+            ser.dst.step_by_u32(FDT_END);
+        }
+        // TODO: check buf1 buf2
+        // println!("{:x?} {:x?}", buf1, buf2);
+        // assert!(false);
+    }
+    #[test]
+    fn add_node_ser_test() {
+        #[derive(Serialize)]
+        struct Base {
+            pub hello: u32,
+            pub base1: Base1,
+            pub hello2: u32,
+            pub base2: Base1,
+        }
+        #[derive(Serialize)]
+        struct Base1 {
+            pub hello: &'static str,
+        }
+        let mut buf1 = [0u8; MAX_SIZE];
+        let mut buf2 = [0u8; MAX_SIZE];
+
+        {
+            let mut dst = crate::ser::Pointer::new(&mut buf1);
+            let mut block = crate::ser::StringBlock::new(&mut buf2);
+            let new_base = Base1 { hello: "added" };
+            let patch = crate::ser::patch::Patch::new("/base3", &new_base as _);
             let mut list = [patch];
             let mut patch_list = crate::ser::PatchList::new(&mut list);
             let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
