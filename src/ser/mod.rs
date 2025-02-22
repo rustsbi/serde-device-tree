@@ -1,114 +1,11 @@
+pub mod patch;
+pub mod pointer;
+pub mod string_block;
+
 use crate::common::*;
-
-pub struct Pointer<'de> {
-    pub offset: usize,
-    pub data: &'de mut [u8],
-}
-
-pub struct StringBlock<'de> {
-    pub end: usize,
-    pub data: &'de mut [u8],
-}
-
-impl<'de> StringBlock<'de> {
-    pub fn new(dst: &'de mut [u8]) -> StringBlock<'de> {
-        StringBlock { data: dst, end: 0 }
-    }
-
-    /// Will panic when len > end
-    /// TODO: show as error
-    /// Return (Result String, End Offset)
-    pub fn get_str_by_offset<'a>(&'a self, offset: usize) -> (&'a str, usize) {
-        if offset > self.end {
-            panic!("invalid read");
-        }
-        let current_slice = &self.data[offset..];
-        let pos = current_slice
-            .iter()
-            .position(|&x| x == b'\0')
-            .unwrap_or(self.data.len());
-        let (a, _) = current_slice.split_at(pos + 1);
-        let result = unsafe { core::str::from_utf8_unchecked(&a[..a.len() - 1]) };
-        (result, pos + offset + 1)
-    }
-
-    fn insert_u8(&mut self, data: u8) {
-        self.data[self.end] = data;
-        self.end += 1;
-    }
-    /// Return the start offset of inserted string.
-    pub fn insert_str(&mut self, name: &str) -> usize {
-        let result = self.end;
-        name.bytes().for_each(|x| {
-            self.insert_u8(x);
-        });
-        self.insert_u8(0);
-        result
-    }
-
-    pub fn find_or_insert(&mut self, name: &str) -> usize {
-        let mut current_pos = 0;
-        while current_pos < self.end {
-            let (result, new_pos) = self.get_str_by_offset(current_pos);
-            if result == name {
-                return current_pos;
-            }
-            current_pos = new_pos;
-        }
-
-        self.insert_str(name)
-    }
-}
-
-impl<'de> Pointer<'de> {
-    pub fn new(dst: &'de mut [u8]) -> Pointer<'de> {
-        Pointer {
-            offset: 0,
-            data: dst,
-        }
-    }
-
-    pub fn write_to_offset_u32(&mut self, offset: usize, value: u32) {
-        self.data[offset..offset + 4].copy_from_slice(&u32::to_be_bytes(value));
-    }
-
-    pub fn step_by_prop(&mut self) -> usize {
-        self.step_by_u32(FDT_PROP);
-        let offset = self.offset;
-        self.step_by_u32(FDT_NOP); // When create prop header, we do not know how long of the prop value.
-        self.step_by_u32(FDT_NOP); // We can not assume this is a prop, so nop for default.
-        offset
-    }
-
-    pub fn step_by_len(&mut self, len: usize) {
-        self.offset += len
-    }
-
-    pub fn step_by_u32(&mut self, value: u32) {
-        self.data[self.offset..self.offset + 4].copy_from_slice(&u32::to_be_bytes(value));
-        self.step_by_len(4);
-    }
-
-    pub fn step_by_u8(&mut self, value: u8) {
-        self.data[self.offset] = value;
-        self.step_by_len(1);
-    }
-
-    pub fn step_align(&mut self) {
-        while self.offset % 4 != 0 {
-            self.data[self.offset] = 0;
-            self.offset += 1;
-        }
-    }
-
-    pub fn step_by_name(&mut self, name: &str) {
-        name.bytes().for_each(|x| {
-            self.step_by_u8(x);
-        });
-        self.step_by_u8(0);
-        self.step_align();
-    }
-}
+use patch::PatchList;
+use pointer::Pointer;
+use string_block::StringBlock;
 
 #[derive(Clone, Copy)]
 pub enum ValueType {
@@ -116,18 +13,48 @@ pub enum ValueType {
     Prop,
 }
 
+#[derive(Debug)]
+pub enum Error {
+    Unknown,
+}
+
+impl core::fmt::Display for Error {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{:?}", self)
+    }
+}
+
+impl core::error::Error for Error {}
+
+impl serde::ser::Error for Error {
+    fn custom<T>(_msg: T) -> Self
+    where
+        T: std::fmt::Display,
+    {
+        Self::Unknown
+    }
+}
+
 pub struct Serializer<'de> {
     dst: &'de mut Pointer<'de>,
     string_block: &'de mut StringBlock<'de>,
     value_type: ValueType,
+    current_dep: usize,
+    patch_list: &'de mut PatchList<'de>,
 }
 
 impl<'de> Serializer<'de> {
-    pub fn new(dst: &'de mut Pointer<'de>, cache: &'de mut StringBlock<'de>) -> Serializer<'de> {
+    pub fn new(
+        dst: &'de mut Pointer<'de>,
+        cache: &'de mut StringBlock<'de>,
+        patch_list: &'de mut PatchList<'de>,
+    ) -> Serializer<'de> {
         Serializer {
             dst,
             string_block: cache,
+            current_dep: 0,
             value_type: ValueType::Node,
+            patch_list,
         }
     }
 }
@@ -165,7 +92,18 @@ impl<'a, 'de> serde::ser::SerializeStruct for &'a mut Serializer<'de> {
     {
         let prop_header_offset = self.dst.step_by_prop();
         let old_value_type = self.value_type;
-        value.serialize(&mut **self)?;
+        self.current_dep += 1;
+        let matched_patch = self.patch_list.step_forward(key, self.current_dep);
+
+        match matched_patch {
+            Some(data) => {
+                data.serialize(&mut **self);
+            }
+            None => {
+                value.serialize(&mut **self)?;
+            }
+        }
+
         // We now know how long the prop value.
         // TODO: make we have some better way than put nop, like move this block ahead.
         if let ValueType::Node = self.value_type {
@@ -181,12 +119,17 @@ impl<'a, 'de> serde::ser::SerializeStruct for &'a mut Serializer<'de> {
                 self.string_block.find_or_insert(key) as u32,
             );
         }
+
         self.value_type = old_value_type;
         self.dst.step_align();
+        self.patch_list.step_back(self.current_dep);
+        self.current_dep -= 1;
+
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
+        // TODO: patch type add
         self.dst.step_by_u32(FDT_END_NODE);
         Ok(())
     }
@@ -274,28 +217,6 @@ impl<'a, 'de> serde::ser::SerializeTupleStruct for &'a mut Serializer<'de> {
     }
 }
 
-#[derive(Debug)]
-pub enum Error {
-    Unknown,
-}
-
-impl core::fmt::Display for Error {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{:?}", self)
-    }
-}
-
-impl core::error::Error for Error {}
-
-impl serde::ser::Error for Error {
-    fn custom<T>(_msg: T) -> Self
-    where
-        T: std::fmt::Display,
-    {
-        Self::Unknown
-    }
-}
-
 impl<'a, 'de> serde::ser::Serializer for &'a mut Serializer<'de> {
     type Ok = ();
     type Error = Error;
@@ -366,8 +287,10 @@ impl<'a, 'de> serde::ser::Serializer for &'a mut Serializer<'de> {
         Ok(())
     }
 
-    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        todo!("bytes");
+    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+        self.value_type = ValueType::Prop;
+        v.iter().for_each(|x| self.dst.step_by_u8(*x));
+        Ok(())
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
@@ -459,7 +382,12 @@ impl<'a, 'de> serde::ser::Serializer for &'a mut Serializer<'de> {
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         self.dst.step_by_u32(FDT_BEGIN_NODE);
-        self.dst.step_by_name(name);
+        if self.current_dep == 0 {
+            // The name of root node should be empty.
+            self.dst.step_by_u32(0);
+        } else {
+            self.dst.step_by_name(name);
+        }
         self.value_type = ValueType::Node;
         Ok(self)
     }
@@ -480,7 +408,7 @@ mod tests {
     use crate::common::*;
     use serde::ser::Serialize;
     use serde_derive::Serialize;
-    const MAX_SIZE: usize = 128;
+    const MAX_SIZE: usize = 128 + 64;
     #[test]
     fn base_ser_test() {
         #[derive(Serialize)]
@@ -493,7 +421,8 @@ mod tests {
         {
             let mut dst = crate::ser::Pointer::new(&mut buf1);
             let mut block = crate::ser::StringBlock::new(&mut buf2);
-            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block);
+            let mut patch_list = crate::ser::PatchList::new(&mut []);
+            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
             let base = Base { hello: 0xdeedbeef };
             base.serialize(&mut ser).unwrap();
             // TODO: write end, this should be write by other thing.
@@ -518,7 +447,8 @@ mod tests {
         {
             let mut dst = crate::ser::Pointer::new(&mut buf1);
             let mut block = crate::ser::StringBlock::new(&mut buf2);
-            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block);
+            let mut patch_list = crate::ser::PatchList::new(&mut []);
+            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
             let base = Base {
                 hello: 0xdeedbeef,
                 base1: Base1 { hello: 0x10000001 },
@@ -547,7 +477,8 @@ mod tests {
         {
             let mut dst = crate::ser::Pointer::new(&mut buf1);
             let mut block = crate::ser::StringBlock::new(&mut buf2);
-            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block);
+            let mut patch_list = crate::ser::PatchList::new(&mut []);
+            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
             let base = Base {
                 hello: 0xdeedbeef,
                 base1: Base1 {
@@ -574,10 +505,127 @@ mod tests {
         {
             let mut dst = crate::ser::Pointer::new(&mut buf1);
             let mut block = crate::ser::StringBlock::new(&mut buf2);
-            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block);
+            let mut patch_list = crate::ser::PatchList::new(&mut []);
+            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
             let base = Base {
                 hello: 0xdeedbeef,
                 base1: ["Hello", "World!", "Again"],
+            };
+            base.serialize(&mut ser).unwrap();
+            ser.dst.step_by_u32(FDT_END);
+        }
+        // TODO: check buf1 buf2
+        // println!("{:x?} {:x?}", buf1, buf2);
+        // assert!(false);
+    }
+    #[test]
+    fn node_prop_ser_test() {
+        #[derive(Serialize)]
+        struct Base {
+            pub hello: u32,
+            pub base1: Base1,
+            pub hello2: u32,
+            pub base2: Base1,
+        }
+        #[derive(Serialize)]
+        struct Base1 {
+            pub hello: &'static str,
+        }
+        let mut buf1 = [0u8; MAX_SIZE];
+        let mut buf2 = [0u8; MAX_SIZE];
+
+        {
+            let mut dst = crate::ser::Pointer::new(&mut buf1);
+            let mut block = crate::ser::StringBlock::new(&mut buf2);
+            let mut patch_list = crate::ser::PatchList::new(&mut []);
+            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
+            let base = Base {
+                hello: 0xdeedbeef,
+                base1: Base1 {
+                    hello: "Hello, World!",
+                },
+                hello2: 0x11223344,
+                base2: Base1 { hello: "Roger" },
+            };
+            base.serialize(&mut ser).unwrap();
+            ser.dst.step_by_u32(FDT_END);
+        }
+        // TODO: check buf1 buf2
+        // println!("{:x?} {:x?}", buf1, buf2);
+        // assert!(false);
+    }
+    #[test]
+    fn replace_prop_ser_test() {
+        #[derive(Serialize)]
+        struct Base {
+            pub hello: u32,
+            pub base1: Base1,
+            pub hello2: u32,
+            pub base2: Base1,
+        }
+        #[derive(Serialize)]
+        struct Base1 {
+            pub hello: &'static str,
+        }
+        let mut buf1 = [0u8; MAX_SIZE];
+        let mut buf2 = [0u8; MAX_SIZE];
+
+        {
+            let mut dst = crate::ser::Pointer::new(&mut buf1);
+            let mut block = crate::ser::StringBlock::new(&mut buf2);
+            let number = 0x55667788u32;
+            let patch = crate::ser::patch::Patch::new("/hello", &number as _);
+            let mut list = [patch];
+            let mut patch_list = crate::ser::PatchList::new(&mut list);
+            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
+            let base = Base {
+                hello: 0xdeedbeef,
+                base1: Base1 {
+                    hello: "Hello, World!",
+                },
+                hello2: 0x11223344,
+                base2: Base1 { hello: "Roger" },
+            };
+            base.serialize(&mut ser).unwrap();
+            ser.dst.step_by_u32(FDT_END);
+        }
+        // TODO: check buf1 buf2
+        // println!("{:x?} {:x?}", buf1, buf2);
+        // assert!(false);
+    }
+    #[test]
+    fn replace_node_ser_test() {
+        #[derive(Serialize)]
+        struct Base {
+            pub hello: u32,
+            pub base1: Base1,
+            pub hello2: u32,
+            pub base2: Base1,
+        }
+        #[derive(Serialize)]
+        struct Base1 {
+            pub hello: &'static str,
+        }
+        let mut buf1 = [0u8; MAX_SIZE];
+        let mut buf2 = [0u8; MAX_SIZE];
+
+        {
+            let mut dst = crate::ser::Pointer::new(&mut buf1);
+            let mut block = crate::ser::StringBlock::new(&mut buf2);
+            let new_base = Base1 {
+                hello: "replacement",
+            };
+            let patch = crate::ser::patch::Patch::new("/hello", &new_base as _);
+            let mut list = [patch];
+            let mut patch_list = crate::ser::PatchList::new(&mut list);
+            let mut ser = crate::ser::Serializer::new(&mut dst, &mut block, &mut patch_list);
+            let base = Base {
+                hello: 0xdeedbeef,
+                base1: Base1 {
+                    hello: "Hello, World!",
+                },
+                hello2: 0x11223344,
+                base2: Base1 { hello: "Roger" },
             };
             base.serialize(&mut ser).unwrap();
             ser.dst.step_by_u32(FDT_END);
