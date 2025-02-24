@@ -26,11 +26,8 @@ impl<'se> Pointer<'se> {
 
     #[inline(always)]
     pub fn write_to_offset_u32(&mut self, offset: usize, value: u32) {
-        match self.data {
-            Some(ref mut data) => {
-                data[offset..offset + 4].copy_from_slice(&u32::to_be_bytes(value))
-            }
-            None => {}
+        if let Some(ref mut data) = self.data {
+            data[offset..offset + 4].copy_from_slice(&u32::to_be_bytes(value))
         }
     }
 
@@ -50,20 +47,16 @@ impl<'se> Pointer<'se> {
 
     #[inline(always)]
     pub fn step_by_u32(&mut self, value: u32) {
-        match self.data {
-            Some(ref mut data) => {
-                data[self.offset..self.offset + 4].copy_from_slice(&u32::to_be_bytes(value))
-            }
-            None => {}
+        if let Some(ref mut data) = self.data {
+            data[self.offset..self.offset + 4].copy_from_slice(&u32::to_be_bytes(value))
         }
         self.step_by_len(4);
     }
 
     #[inline(always)]
     pub fn step_by_u8(&mut self, value: u8) {
-        match self.data {
-            Some(ref mut data) => data[self.offset] = value,
-            None => {}
+        if let Some(ref mut data) = self.data {
+            data[self.offset] = value
         }
         self.step_by_len(1);
     }
@@ -71,9 +64,8 @@ impl<'se> Pointer<'se> {
     #[inline(always)]
     pub fn step_align(&mut self) {
         while self.offset % 4 != 0 {
-            match self.data {
-                Some(ref mut data) => data[self.offset] = 0,
-                None => {}
+            if let Some(ref mut data) = self.data {
+                data[self.offset] = 0
             }
             self.offset += 1;
         }

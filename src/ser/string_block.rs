@@ -11,7 +11,7 @@ impl<'se> StringBlock<'se> {
     /// Will panic when len > end
     /// TODO: show as error
     /// Return (Result String, End Offset)
-    pub fn get_str_by_offset<'a>(&'a self, offset: usize) -> (&'a str, usize) {
+    pub fn get_str_by_offset(&self, offset: usize) -> (&str, usize) {
         if offset > *self.end {
             panic!("invalid read");
         }

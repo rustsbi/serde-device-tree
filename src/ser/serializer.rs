@@ -42,7 +42,7 @@ trait SerializeDynamicField<'se> {
         T: serde::ser::Serialize + ?Sized;
 }
 
-impl<'a, 'se> SerializeDynamicField<'se> for &'a mut Serializer<'se> {
+impl<'se> SerializeDynamicField<'se> for &mut Serializer<'se> {
     fn serialize_dynamic_field<T>(&mut self, key: &'se str, value: &T) -> Result<(), Error>
     where
         T: serde::ser::Serialize + ?Sized,
@@ -56,7 +56,7 @@ impl<'a, 'se> SerializeDynamicField<'se> for &'a mut Serializer<'se> {
 
         match matched_patch {
             Some(data) => {
-                data.serialize(&mut **self);
+                data.serialize(self);
             }
             None => {
                 value.serialize(&mut **self)?;
@@ -89,7 +89,7 @@ impl<'a, 'se> SerializeDynamicField<'se> for &'a mut Serializer<'se> {
     }
 }
 
-impl<'a, 'se> serde::ser::SerializeMap for &'a mut Serializer<'se> {
+impl serde::ser::SerializeMap for &mut Serializer<'_> {
     type Ok = ();
     type Error = Error;
 
@@ -112,7 +112,7 @@ impl<'a, 'se> serde::ser::SerializeMap for &'a mut Serializer<'se> {
     }
 }
 
-impl<'a, 'se> serde::ser::SerializeStruct for &'a mut Serializer<'se> {
+impl serde::ser::SerializeStruct for &mut Serializer<'_> {
     type Ok = ();
     type Error = Error;
 
@@ -135,7 +135,7 @@ impl<'a, 'se> serde::ser::SerializeStruct for &'a mut Serializer<'se> {
     }
 }
 
-impl<'a, 'se> serde::ser::SerializeStructVariant for &'a mut Serializer<'se> {
+impl serde::ser::SerializeStructVariant for &mut Serializer<'_> {
     type Ok = ();
     type Error = Error;
 
@@ -151,7 +151,7 @@ impl<'a, 'se> serde::ser::SerializeStructVariant for &'a mut Serializer<'se> {
     }
 }
 
-impl<'a, 'se> serde::ser::SerializeSeq for &'a mut Serializer<'se> {
+impl serde::ser::SerializeSeq for &mut Serializer<'_> {
     type Ok = ();
     type Error = Error;
     // TODO: make sure there are no node seq serialize over this function.
@@ -168,7 +168,7 @@ impl<'a, 'se> serde::ser::SerializeSeq for &'a mut Serializer<'se> {
     }
 }
 
-impl<'a, 'se> serde::ser::SerializeTuple for &'a mut Serializer<'se> {
+impl serde::ser::SerializeTuple for &mut Serializer<'_> {
     type Ok = ();
     type Error = Error;
 
@@ -185,7 +185,7 @@ impl<'a, 'se> serde::ser::SerializeTuple for &'a mut Serializer<'se> {
     }
 }
 
-impl<'a, 'se> serde::ser::SerializeTupleVariant for &'a mut Serializer<'se> {
+impl serde::ser::SerializeTupleVariant for &mut Serializer<'_> {
     type Ok = ();
     type Error = Error;
 
@@ -201,7 +201,7 @@ impl<'a, 'se> serde::ser::SerializeTupleVariant for &'a mut Serializer<'se> {
     }
 }
 
-impl<'a, 'se> serde::ser::SerializeTupleStruct for &'a mut Serializer<'se> {
+impl serde::ser::SerializeTupleStruct for &mut Serializer<'_> {
     type Ok = ();
     type Error = Error;
 
@@ -217,7 +217,7 @@ impl<'a, 'se> serde::ser::SerializeTupleStruct for &'a mut Serializer<'se> {
     }
 }
 
-impl<'a, 'se> serde::ser::Serializer for &'a mut Serializer<'se> {
+impl serde::ser::Serializer for &mut Serializer<'_> {
     type Ok = ();
     type Error = Error;
     type SerializeSeq = Self;
@@ -417,7 +417,7 @@ mod tests {
 
         {
             let base = Base { hello: 0xdeedbeef };
-            crate::ser::to_dtb(&base, &mut [], &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &[], &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
     }
@@ -439,7 +439,7 @@ mod tests {
                 hello: 0xdeedbeef,
                 base1: Base1 { hello: 0x10000001 },
             };
-            crate::ser::to_dtb(&base, &mut [], &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &[], &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?} {:x?}", buf1, buf2);
@@ -465,7 +465,7 @@ mod tests {
                     hello: "Hello, World!",
                 },
             };
-            crate::ser::to_dtb(&base, &mut [], &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &[], &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?} {:x?}", buf1, buf2);
@@ -539,7 +539,7 @@ mod tests {
         {
             let number = 0x55667788u32;
             let patch = crate::ser::patch::Patch::new("/hello", &number as _);
-            let mut list = [patch];
+            let list = [patch];
             let base = Base {
                 hello: 0xdeedbeef,
                 base1: Base1 {
@@ -548,7 +548,7 @@ mod tests {
                 hello2: 0x11223344,
                 base2: Base1 { hello: "Roger" },
             };
-            crate::ser::to_dtb(&base, &mut list, &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &list, &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?} {:x?}", buf1, buf2);
@@ -574,7 +574,7 @@ mod tests {
                 hello: "replacement",
             };
             let patch = crate::ser::patch::Patch::new("/hello", &new_base as _);
-            let mut list = [patch];
+            let list = [patch];
             let base = Base {
                 hello: 0xdeedbeef,
                 base1: Base1 {
@@ -583,7 +583,7 @@ mod tests {
                 hello2: 0x11223344,
                 base2: Base1 { hello: "Roger" },
             };
-            crate::ser::to_dtb(&base, &mut list, &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &list, &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?} {:x?}", buf1, buf2);
@@ -607,7 +607,7 @@ mod tests {
         {
             let new_base = Base1 { hello: "added" };
             let patch = crate::ser::patch::Patch::new("/base3", &new_base as _);
-            let mut list = [patch];
+            let list = [patch];
             let base = Base {
                 hello: 0xdeedbeef,
                 base1: Base1 {
@@ -616,7 +616,7 @@ mod tests {
                 hello2: 0x11223344,
                 base2: Base1 { hello: "Roger" },
             };
-            crate::ser::to_dtb(&base, &mut list, &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &list, &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?}", buf1);

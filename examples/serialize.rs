@@ -20,7 +20,7 @@ fn main() {
     {
         let new_base = Base1 { hello: "added" };
         let patch = serde_device_tree::ser::patch::Patch::new("/base3", &new_base as _);
-        let mut list = [patch];
+        let list = [patch];
         let base = Base {
             hello: 0xdeedbeef,
             base1: Base1 {
@@ -29,7 +29,7 @@ fn main() {
             hello2: 0x11223344,
             base2: Base1 { hello: "Roger" },
         };
-        serde_device_tree::ser::to_dtb(&base, &mut list, &mut buf1).unwrap();
+        serde_device_tree::ser::to_dtb(&base, &list, &mut buf1).unwrap();
     }
     let mut file = std::fs::File::create("gen.dtb").unwrap();
     file.write_all(&buf1).unwrap();

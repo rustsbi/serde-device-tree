@@ -31,10 +31,7 @@ impl<'se> Patch<'se> {
         if x == 0 {
             return "";
         }
-        match self.name.split('/').nth(x) {
-            Some(result) => result,
-            None => "",
-        }
+        self.name.split('/').nth(x).unwrap_or_default()
     }
 
     // I hope to impl serde::ser::Serializer, but erase_serialize's return value is different from
@@ -62,7 +59,7 @@ impl<'se> PatchList<'se> {
             if patch.matched_depth.get() == depth - 1 && patch.get_depth_path(depth) == name {
                 patch.matched_depth.set(patch.matched_depth.get() + 1);
                 if patch.get_depth() == depth {
-                    if let Some(_) = matched_patch {
+                    if matched_patch.is_some() {
                         panic!("More than one replace data on a same path");
                     }
                     matched_patch = Some(patch);
@@ -82,7 +79,7 @@ impl<'se> PatchList<'se> {
 
     pub fn add_list(&self, depth: usize) -> impl Iterator<Item = &'se Patch<'se>> + use<'se> {
         self.list.iter().filter(move |x| {
-            x.matched_depth.get() == depth && x.get_depth() == depth + 1 && x.parsed.get() == false
+            x.matched_depth.get() == depth && x.get_depth() == depth + 1 && !x.parsed.get()
         })
     }
 }
