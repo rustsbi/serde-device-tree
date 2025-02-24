@@ -14,6 +14,7 @@ pub struct Serializer<'se> {
     pub dst: &'se mut Pointer<'se>,
     string_block: &'se mut StringBlock<'se>,
     value_type: ValueType,
+    current_name: &'se str,
     current_dep: usize,
     patch_list: &'se mut PatchList<'se>,
 }
@@ -28,6 +29,7 @@ impl<'se> Serializer<'se> {
             dst,
             string_block: cache,
             current_dep: 0,
+            current_name: "",
             value_type: ValueType::Node,
             patch_list,
         }
@@ -46,8 +48,10 @@ impl<'a, 'se> SerializeDynamicField<'se> for &'a mut Serializer<'se> {
         T: serde::ser::Serialize + ?Sized,
     {
         let prop_header_offset = self.dst.step_by_prop();
-        let old_value_type = self.value_type;
+        let prev_type = self.value_type;
+        let prev_name = self.current_name;
         self.current_dep += 1;
+        self.current_name = key;
         let matched_patch = self.patch_list.step_forward(key, self.current_dep);
 
         match matched_patch {
@@ -75,7 +79,8 @@ impl<'a, 'se> SerializeDynamicField<'se> for &'a mut Serializer<'se> {
             );
         }
 
-        self.value_type = old_value_type;
+        self.value_type = prev_type;
+        self.current_name = prev_name;
         self.dst.step_align();
         self.patch_list.step_back(self.current_dep);
         self.current_dep -= 1;
@@ -373,7 +378,7 @@ impl<'a, 'se> serde::ser::Serializer for &'a mut Serializer<'se> {
 
     fn serialize_struct(
         self,
-        name: &'static str,
+        _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
         self.dst.step_by_u32(FDT_BEGIN_NODE);
@@ -381,7 +386,7 @@ impl<'a, 'se> serde::ser::Serializer for &'a mut Serializer<'se> {
             // The name of root node should be empty.
             self.dst.step_by_u32(0);
         } else {
-            self.dst.step_by_name(name);
+            self.dst.step_by_name(self.current_name);
         }
         self.value_type = ValueType::Node;
         Ok(self)
@@ -401,7 +406,7 @@ impl<'a, 'se> serde::ser::Serializer for &'a mut Serializer<'se> {
 #[cfg(test)]
 mod tests {
     use serde_derive::Serialize;
-    const MAX_SIZE: usize = 256;
+    const MAX_SIZE: usize = 256 + 32;
     #[test]
     fn base_ser_test() {
         #[derive(Serialize)]

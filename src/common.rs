@@ -15,7 +15,7 @@ pub(crate) struct Header {
     pub size_dt_struct: u32,
 }
 
-const DEVICE_TREE_MAGIC: u32 = 0xD00DFEED;
+pub const DEVICE_TREE_MAGIC: u32 = 0xD00DFEED;
 const U32_LEN: u32 = core::mem::size_of::<u32>() as _;
 
 pub(crate) const ALIGN: usize = core::mem::align_of::<usize>();
