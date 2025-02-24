@@ -1,14 +1,15 @@
+use super::serializer::Serializer;
 use core::cell::Cell;
 
-pub struct Patch<'de> {
-    name: &'de str,
-    pub data: &'de dyn erased_serde::Serialize,
+pub struct Patch<'se> {
+    name: &'se str,
+    pub data: &'se dyn erased_serde::Serialize,
     matched_depth: Cell<usize>,
     parsed: Cell<bool>,
 }
 
-impl<'de> Patch<'de> {
-    pub fn new(name: &'de str, data: &'de dyn erased_serde::Serialize) -> Patch<'de> {
+impl<'se> Patch<'se> {
+    pub fn new(name: &'se str, data: &'se dyn erased_serde::Serialize) -> Patch<'se> {
         Patch {
             name,
             data,
@@ -26,7 +27,7 @@ impl<'de> Patch<'de> {
         self.name.split('/').count() - 1
     }
 
-    pub fn get_depth_path(&self, x: usize) -> &'de str {
+    pub fn get_depth_path(&self, x: usize) -> &'se str {
         if x == 0 {
             return "";
         }
@@ -38,7 +39,7 @@ impl<'de> Patch<'de> {
 
     // I hope to impl serde::ser::Serializer, but erase_serialize's return value is different from
     // normal serialize, so we do this.
-    pub fn serialize(&self, serializer: &mut crate::ser::Serializer<'de>) {
+    pub fn serialize(&self, serializer: &mut Serializer<'se>) {
         self.parsed.set(true);
         self.data
             .erased_serialize(&mut <dyn erased_serde::Serializer>::erase(serializer))
@@ -46,16 +47,16 @@ impl<'de> Patch<'de> {
     }
 }
 
-pub struct PatchList<'de> {
-    list: &'de [Patch<'de>],
+pub struct PatchList<'se> {
+    list: &'se [Patch<'se>],
 }
 
-impl<'de> PatchList<'de> {
-    pub fn new(list: &'de [Patch<'de>]) -> PatchList<'de> {
+impl<'se> PatchList<'se> {
+    pub fn new(list: &'se [Patch<'se>]) -> PatchList<'se> {
         PatchList { list }
     }
 
-    pub fn step_forward(&self, name: &'de str, depth: usize) -> Option<&'de Patch<'de>> {
+    pub fn step_forward(&self, name: &'se str, depth: usize) -> Option<&'se Patch<'se>> {
         let mut matched_patch = None;
         self.list.iter().for_each(|patch| {
             if patch.matched_depth.get() == depth - 1 && patch.get_depth_path(depth) == name {
@@ -79,7 +80,7 @@ impl<'de> PatchList<'de> {
         });
     }
 
-    pub fn add_list(&self, depth: usize) -> impl Iterator<Item = &'de Patch<'de>> + use<'de> {
+    pub fn add_list(&self, depth: usize) -> impl Iterator<Item = &'se Patch<'se>> + use<'se> {
         self.list.iter().filter(move |x| {
             x.matched_depth.get() == depth && x.get_depth() == depth + 1 && x.parsed.get() == false
         })
