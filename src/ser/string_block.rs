@@ -1,17 +1,24 @@
+/// StringBlock
+/// As spec said, dtb have a block called string block for saving prop names.
 pub struct StringBlock<'se> {
     end: &'se mut usize,
     data: &'se mut [u8],
 }
 
 impl<'se> StringBlock<'se> {
+    /// Make a new string block.
+    ///
+    /// For get how long is string block, we make `end` as a mut ref.
     #[inline(always)]
     pub fn new(dst: &'se mut [u8], end: &'se mut usize) -> StringBlock<'se> {
         StringBlock { data: dst, end }
     }
 
-    /// Will panic when len > end
-    /// TODO: show as error
-    /// Return (Result String, End Offset)
+    // TODO: show as error
+    /// Assume the passing `offset` is the start of a string, and return this string.
+    /// Return (Result String, End Offset).
+    ///
+    /// Will panic when len > end.
     #[inline(always)]
     pub fn get_str_by_offset(&self, offset: usize) -> (&str, usize) {
         if offset > *self.end {
@@ -44,6 +51,7 @@ impl<'se> StringBlock<'se> {
         result
     }
 
+    /// Find a string. If not found, insert it.
     #[inline(always)]
     pub fn find_or_insert(&mut self, name: &str) -> usize {
         let mut current_pos = 0;

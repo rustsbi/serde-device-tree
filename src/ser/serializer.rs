@@ -5,18 +5,23 @@ use super::string_block::StringBlock;
 use crate::common::*;
 
 #[derive(Clone, Copy)]
+// The enum for current parsing type.
 enum ValueType {
     Node,
     Prop,
 }
 
+/// Serializer
+/// - `dst`: Pointer of distance &[u8] and the ref of &[u8].
+/// - `current_value_type`, `current_name`, `current_dep`: For recursive.
 pub struct Serializer<'se> {
     pub dst: &'se mut Pointer<'se>,
     string_block: &'se mut StringBlock<'se>,
-    value_type: ValueType,
+    patch_list: &'se mut PatchList<'se>,
+
+    current_value_type: ValueType,
     current_name: &'se str,
     current_dep: usize,
-    patch_list: &'se mut PatchList<'se>,
 }
 
 impl<'se> Serializer<'se> {
@@ -31,7 +36,7 @@ impl<'se> Serializer<'se> {
             string_block: cache,
             current_dep: 0,
             current_name: "",
-            value_type: ValueType::Node,
+            current_value_type: ValueType::Node,
             patch_list,
         }
     }
@@ -49,7 +54,9 @@ impl<'se> SerializeDynamicField<'se> for &mut Serializer<'se> {
         T: serde::ser::Serialize + ?Sized,
     {
         let prop_header_offset = self.dst.step_by_prop();
-        let prev_type = self.value_type;
+
+        // Save prev
+        let prev_type = self.current_value_type;
         let prev_name = self.current_name;
         self.current_dep += 1;
         self.current_name = key;
@@ -66,7 +73,7 @@ impl<'se> SerializeDynamicField<'se> for &mut Serializer<'se> {
 
         // We now know how long the prop value.
         // TODO: make we have some better way than put nop, like move this block ahead.
-        if let ValueType::Node = self.value_type {
+        if let ValueType::Node = self.current_value_type {
             self.dst
                 .write_to_offset_u32(prop_header_offset - 4, FDT_NOP);
         } else {
@@ -80,10 +87,12 @@ impl<'se> SerializeDynamicField<'se> for &mut Serializer<'se> {
             );
         }
 
-        self.value_type = prev_type;
-        self.current_name = prev_name;
         self.dst.step_align();
+
+        // Load prev
         self.patch_list.step_back(self.current_dep);
+        self.current_value_type = prev_type;
+        self.current_name = prev_name;
         self.current_dep -= 1;
 
         Ok(())
@@ -258,7 +267,7 @@ impl serde::ser::Serializer for &mut Serializer<'_> {
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        self.value_type = ValueType::Prop;
+        self.current_value_type = ValueType::Prop;
         self.dst.step_by_u32(v);
         Ok(())
     }
@@ -280,7 +289,7 @@ impl serde::ser::Serializer for &mut Serializer<'_> {
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        self.value_type = ValueType::Prop;
+        self.current_value_type = ValueType::Prop;
         v.bytes().for_each(|x| {
             self.dst.step_by_u8(x);
         });
@@ -289,7 +298,7 @@ impl serde::ser::Serializer for &mut Serializer<'_> {
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        self.value_type = ValueType::Prop;
+        self.current_value_type = ValueType::Prop;
         v.iter().for_each(|x| self.dst.step_by_u8(*x));
         Ok(())
     }
@@ -347,7 +356,7 @@ impl serde::ser::Serializer for &mut Serializer<'_> {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        self.value_type = ValueType::Prop;
+        self.current_value_type = ValueType::Prop;
         Ok(self)
     }
 
@@ -389,7 +398,7 @@ impl serde::ser::Serializer for &mut Serializer<'_> {
         } else {
             self.dst.step_by_name(self.current_name);
         }
-        self.value_type = ValueType::Node;
+        self.current_value_type = ValueType::Node;
         Ok(self)
     }
 

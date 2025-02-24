@@ -8,6 +8,8 @@ use crate::ser::patch::Patch;
 
 const RSVMAP_LEN: usize = 16;
 
+/// Serialize the data to dtb, with a list fof Patch, write to the `writer`.
+///
 /// We do run-twice on convert, first time to generate string block, second time todo real
 /// structure.
 pub fn to_dtb<'se, T>(data: &T, list: &'se [Patch<'se>], writer: &'se mut [u8]) -> Result<(), Error>
@@ -45,6 +47,7 @@ where
         data.serialize(&mut ser)?;
         ser.dst.step_by_u32(FDT_END);
     }
+    // Make header
     {
         let header = unsafe { &mut *(header.as_mut_ptr() as *mut Header) };
         header.magic = u32::from_be(DEVICE_TREE_MAGIC);
