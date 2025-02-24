@@ -20,6 +20,7 @@ pub struct Serializer<'se> {
 }
 
 impl<'se> Serializer<'se> {
+    #[inline(always)]
     pub fn new(
         dst: &'se mut Pointer<'se>,
         cache: &'se mut StringBlock<'se>,

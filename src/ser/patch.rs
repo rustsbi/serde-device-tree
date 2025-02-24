@@ -9,6 +9,7 @@ pub struct Patch<'se> {
 }
 
 impl<'se> Patch<'se> {
+    #[inline(always)]
     pub fn new(name: &'se str, data: &'se dyn erased_serde::Serialize) -> Patch<'se> {
         Patch {
             name,
@@ -18,15 +19,18 @@ impl<'se> Patch<'se> {
         }
     }
 
+    #[inline(always)]
     pub fn init(&self) {
         self.matched_depth.set(0);
         self.parsed.set(false);
     }
 
+    #[inline(always)]
     pub fn get_depth(&self) -> usize {
         self.name.split('/').count() - 1
     }
 
+    #[inline(always)]
     pub fn get_depth_path(&self, x: usize) -> &'se str {
         if x == 0 {
             return "";
@@ -36,6 +40,7 @@ impl<'se> Patch<'se> {
 
     // I hope to impl serde::ser::Serializer, but erase_serialize's return value is different from
     // normal serialize, so we do this.
+    #[inline(always)]
     pub fn serialize(&self, serializer: &mut Serializer<'se>) {
         self.parsed.set(true);
         self.data
@@ -49,10 +54,12 @@ pub struct PatchList<'se> {
 }
 
 impl<'se> PatchList<'se> {
+    #[inline(always)]
     pub fn new(list: &'se [Patch<'se>]) -> PatchList<'se> {
         PatchList { list }
     }
 
+    #[inline(always)]
     pub fn step_forward(&self, name: &'se str, depth: usize) -> Option<&'se Patch<'se>> {
         let mut matched_patch = None;
         self.list.iter().for_each(|patch| {
@@ -69,6 +76,7 @@ impl<'se> PatchList<'se> {
         matched_patch
     }
 
+    #[inline(always)]
     pub fn step_back(&self, depth: usize) {
         self.list.iter().for_each(|patch| {
             if patch.matched_depth.get() == depth {
@@ -77,6 +85,7 @@ impl<'se> PatchList<'se> {
         });
     }
 
+    #[inline(always)]
     pub fn add_list(&self, depth: usize) -> impl Iterator<Item = &'se Patch<'se>> + use<'se> {
         self.list.iter().filter(move |x| {
             x.matched_depth.get() == depth && x.get_depth() == depth + 1 && !x.parsed.get()

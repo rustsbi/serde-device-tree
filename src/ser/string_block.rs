@@ -4,6 +4,7 @@ pub struct StringBlock<'se> {
 }
 
 impl<'se> StringBlock<'se> {
+    #[inline(always)]
     pub fn new(dst: &'se mut [u8], end: &'se mut usize) -> StringBlock<'se> {
         StringBlock { data: dst, end }
     }
@@ -11,6 +12,7 @@ impl<'se> StringBlock<'se> {
     /// Will panic when len > end
     /// TODO: show as error
     /// Return (Result String, End Offset)
+    #[inline(always)]
     pub fn get_str_by_offset(&self, offset: usize) -> (&str, usize) {
         if offset > *self.end {
             panic!("invalid read");
@@ -25,11 +27,14 @@ impl<'se> StringBlock<'se> {
         (result, pos + offset + 1)
     }
 
+    #[inline(always)]
     fn insert_u8(&mut self, data: u8) {
         self.data[*self.end] = data;
         *self.end += 1;
     }
+
     /// Return the start offset of inserted string.
+    #[inline(always)]
     pub fn insert_str(&mut self, name: &str) -> usize {
         let result = *self.end;
         name.bytes().for_each(|x| {
@@ -39,6 +44,7 @@ impl<'se> StringBlock<'se> {
         result
     }
 
+    #[inline(always)]
     pub fn find_or_insert(&mut self, name: &str) -> usize {
         let mut current_pos = 0;
         while current_pos < *self.end {
