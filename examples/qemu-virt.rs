@@ -11,9 +11,10 @@ use serde_derive::Deserialize;
 // - `NodeSeq`: name@... 区分的一组同级同类的连续节点，这个类型要求可变的内存。
 // - `StrSeq`: '\0' 分隔的一组字符串，设备树中一种常见的属性类型，这个类型要求可变的内存。
 use serde_device_tree::{
+    Dtb, DtbPtr,
     buildin::{Node, NodeSeq, Reg, StrSeq},
     error::Error,
-    from_raw_mut, Dtb, DtbPtr,
+    from_raw_mut,
 };
 
 const RAW_DEVICE_TREE: &[u8] = include_bytes!("qemu-virt.dtb");

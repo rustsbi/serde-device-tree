@@ -1,4 +1,4 @@
-﻿//! Deserialize device tree data to a Rust data structure,
+//! Deserialize device tree data to a Rust data structure,
 //! the memory region contains dtb file should be mutable.
 
 use crate::error::Error as DtError;
@@ -26,7 +26,7 @@ use cursor::{BodyCursor, Cursor, PropCursor};
 use data::{ValueCursor, ValueDeserializer};
 use reg::RegConfig;
 use struct_access::{StructAccess, StructAccessType, Temp};
-use structs::{RefDtb, StructureBlock, BLOCK_LEN};
+use structs::{BLOCK_LEN, RefDtb, StructureBlock};
 
 /// 从 [`RefDtb`] 反序列化一个描述设备树的 `T` 类型实例。
 ///

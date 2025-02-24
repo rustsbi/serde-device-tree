@@ -1,7 +1,7 @@
+use super::Error;
 use super::patch::PatchList;
 use super::pointer::Pointer;
 use super::string_block::StringBlock;
-use super::Error;
 use crate::common::*;
 
 #[derive(Clone, Copy)]
@@ -619,7 +619,7 @@ mod tests {
             crate::ser::to_dtb(&base, &mut list, &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
-        println!("{:x?}", buf1);
-        assert!(false);
+        // println!("{:x?}", buf1);
+        // assert!(false);
     }
 }

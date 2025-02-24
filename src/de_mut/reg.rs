@@ -1,4 +1,4 @@
-﻿use super::{PropCursor, RefDtb, ValueCursor, BLOCK_LEN};
+use super::{BLOCK_LEN, PropCursor, RefDtb, ValueCursor};
 use core::{fmt::Debug, ops::Range};
 use serde::Deserialize;
 

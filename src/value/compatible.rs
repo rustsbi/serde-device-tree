@@ -1,5 +1,5 @@
 use core::{fmt, marker::PhantomData};
-use serde::{de::Visitor, Deserialize};
+use serde::{Deserialize, de::Visitor};
 
 /// Field representing compatability of a certain device in the tree.
 ///

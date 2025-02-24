@@ -1,9 +1,9 @@
-﻿use super::cursor::MultiNodeCursor;
+use super::cursor::MultiNodeCursor;
 use super::{BodyCursor, Cursor};
 use super::{DtError, PropCursor, RefDtb, RegConfig};
 
 use core::marker::PhantomData;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ValueCursor {

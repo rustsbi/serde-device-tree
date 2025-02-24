@@ -70,8 +70,9 @@ impl<'de> Node<'de> {
 #[cfg(test)]
 mod tests {
     use crate::{
+        Dtb, DtbPtr,
         buildin::{Node, StrSeq},
-        from_raw_mut, Dtb, DtbPtr,
+        from_raw_mut,
     };
     const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/hifive-unmatched-a00.dtb");
     const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();

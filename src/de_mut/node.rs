@@ -1,8 +1,8 @@
-﻿use super::{BodyCursor, Cursor, PropCursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
+use super::{BodyCursor, Cursor, PropCursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use serde::de::MapAccess;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 
 // TODO: Spec 2.3.5 said that we should not inherited from ancestors and the size-cell &
 // address-cells should only used for current node's children.
@@ -293,7 +293,7 @@ impl<'de> PropItem<'de> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{buildin::Node, from_raw_mut, Dtb, DtbPtr};
+    use crate::{Dtb, DtbPtr, buildin::Node, from_raw_mut};
     const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/hifive-unmatched-a00.dtb");
     const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
     #[repr(align(8))]

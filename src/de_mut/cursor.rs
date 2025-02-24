@@ -1,4 +1,4 @@
-﻿use super::{DtError, RefDtb, StructureBlock, BLOCK_LEN};
+use super::{BLOCK_LEN, DtError, RefDtb, StructureBlock};
 use core::marker::PhantomData;
 
 #[derive(Clone, Copy, Debug)]

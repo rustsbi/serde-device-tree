@@ -1,7 +1,7 @@
 use super::{BodyCursor, Cursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
 use core::{fmt::Debug, marker::PhantomData};
 use serde::de::SeqAccess;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 
 /// 一组名字以 `@...` 区分，同类、同级且连续的节点的映射。
 ///
