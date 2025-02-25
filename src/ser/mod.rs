@@ -6,6 +6,7 @@ pub mod string_block;
 use crate::common::*;
 use crate::ser::patch::Patch;
 
+// TODO: set reverse map
 const RSVMAP_LEN: usize = 16;
 
 /// Serialize the data to dtb, with a list fof Patch, write to the `writer`.

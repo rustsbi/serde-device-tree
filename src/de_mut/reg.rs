@@ -1,6 +1,6 @@
 use super::{BLOCK_LEN, PropCursor, RefDtb, ValueCursor};
 use core::{fmt::Debug, ops::Range};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// 节点地址空间。
 pub struct Reg<'de>(Inner<'de>);
@@ -114,5 +114,15 @@ impl Iterator for RegIter<'_> {
         } else {
             None
         }
+    }
+}
+
+impl<'se> Serialize for Reg<'se> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Pass bytes directly for Reg.
+        serializer.serialize_bytes(self.0.cursor.data_on(self.0.dtb))
     }
 }

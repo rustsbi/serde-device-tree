@@ -227,7 +227,7 @@ impl serde::ser::SerializeTupleStruct for &mut Serializer<'_> {
     }
 }
 
-impl serde::ser::Serializer for &mut Serializer<'_> {
+impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
     type Ok = ();
     type Error = Error;
     type SerializeSeq = Self;
@@ -332,14 +332,48 @@ impl serde::ser::Serializer for &mut Serializer<'_> {
     }
 
     fn serialize_newtype_struct<T>(
-        self,
-        _name: &'static str,
-        _v: &T,
+        mut self,
+        name: &'static str,
+        v: &T,
     ) -> Result<Self::Ok, Self::Error>
     where
         T: serde::ser::Serialize + ?Sized,
     {
-        todo!("newtype struct");
+        use crate::de_mut::node::{Node, NodeItem};
+        use crate::de_mut::{NODE_NAME, NODE_NODE_ITEM_NAME};
+        use core::ptr::addr_of;
+        match name {
+            NODE_NAME => {
+                // TODO: match level
+                self.current_value_type = ValueType::Node;
+                let v = unsafe { &*(addr_of!(v) as *const &Node<'se>) };
+                self.dst.step_by_u32(FDT_BEGIN_NODE);
+                if self.current_dep == 0 {
+                    // The name of root node should be empty.
+                    self.dst.step_by_u32(0);
+                } else {
+                    self.dst.step_by_name(v.name());
+                    self.dst.step_align();
+                }
+                for prop in v.props() {
+                    self.serialize_dynamic_field(prop.get_name(), &prop)?;
+                }
+                for node in v.nodes() {
+                    self.serialize_dynamic_field(
+                        node.get_full_name(),
+                        &node.deserialize::<Node>(),
+                    )?;
+                }
+                self.dst.step_by_u32(FDT_END_NODE);
+                Ok(())
+            }
+            NODE_NODE_ITEM_NAME => {
+                self.current_value_type = ValueType::Node;
+                let v = unsafe { &*(addr_of!(v) as *const &NodeItem<'se>) };
+                self.serialize_newtype_struct(NODE_NAME, &v.deserialize::<Node>())
+            }
+            _ => todo!(),
+        }
     }
 
     fn serialize_newtype_variant<T>(
@@ -398,6 +432,7 @@ impl serde::ser::Serializer for &mut Serializer<'_> {
         } else {
             self.dst.step_by_name(self.current_name);
         }
+        self.dst.step_align();
         self.current_value_type = ValueType::Node;
         Ok(self)
     }

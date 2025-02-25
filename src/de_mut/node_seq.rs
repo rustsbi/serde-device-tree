@@ -140,12 +140,12 @@ impl<'de> Iterator for NodeSeqIter<'de, '_> {
                         return None;
                     }
 
-                    self.de.cursor = ValueCursor::Body(node_reuslt.next_cursor);
+                    self.de.cursor = ValueCursor::Body(node_reuslt.skip_cursor);
 
                     Some(Self::Item {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
-                        body: node_reuslt.skip_cursor,
+                        body: node_reuslt.data_cursor,
                         at: suf_name,
                     })
                 }
