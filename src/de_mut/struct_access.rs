@@ -50,14 +50,17 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
         let origin_cursor = match self.de.cursor {
             ValueCursor::Body(cursor) => cursor,
             ValueCursor::Node(result) => result.skip_cursor,
+            ValueCursor::NodeIn(result) => result.data_cursor,
             _ => unreachable!("map access's cursor should always be body cursor"),
         };
         self.de.cursor = ValueCursor::Body(origin_cursor);
         let name = loop {
             let origin_cursor = match self.de.cursor {
                 ValueCursor::Body(cursor) => cursor,
+                ValueCursor::Node(result) => result.skip_cursor,
                 _ => unreachable!("map access's cursor should always be body cursor"),
             };
+            self.de.cursor = ValueCursor::Body(origin_cursor);
             match self.de.move_on() {
                 // 子节点名字
                 Cursor::Title(c) => {
@@ -67,7 +70,7 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     // 子节点名字不带 @ 或正在解析 Node 类型
                     if pre_name == name || check_contains(name) {
                         let take_result = c.take_node_on(self.de.dtb, name);
-                        self.de.cursor = ValueCursor::Body(take_result.next_cursor);
+                        self.de.cursor = ValueCursor::Node(take_result);
                         if check_contains(name) {
                             self.temp = Temp::Nodes(take_result);
                             break name;
@@ -76,7 +79,7 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     // @ 之前的部分是真正的名字，用这个名字搜索连续的一组
                     else {
                         let take_result = c.take_group_on(self.de.dtb, pre_name);
-                        self.de.cursor = ValueCursor::Body(take_result.next_cursor);
+                        self.de.cursor = ValueCursor::Node(take_result);
                         if check_contains(pre_name) {
                             self.temp = Temp::Nodes(take_result);
                             break pre_name;
@@ -133,12 +136,12 @@ impl<'de> de::MapAccess<'de> for StructAccess<'de, '_> {
                     StructAccessType::Map(_) => seed.deserialize(&mut ValueDeserializer {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
-                        cursor: ValueCursor::Node(*result),
+                        cursor: ValueCursor::NodeIn(*result),
                     }),
                     StructAccessType::Struct(_) => seed.deserialize(&mut ValueDeserializer {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
-                        cursor: ValueCursor::Node(*result),
+                        cursor: ValueCursor::NodeIn(*result),
                     }),
                     _ => unreachable!(),
                 }
@@ -170,7 +173,7 @@ impl<'de> de::SeqAccess<'de> for StructAccess<'de, '_> {
                 // 子节点名字
                 Cursor::Title(c) => {
                     let (name, _) = c.split_on(self.de.dtb);
-                    let next = c.take_node_on(self.de.dtb, name).next_cursor;
+                    let next = c.take_node_on(self.de.dtb, name).skip_cursor;
                     let prev_cursor = match self.de.cursor {
                         ValueCursor::Body(cursor) => cursor,
                         _ => unreachable!(),

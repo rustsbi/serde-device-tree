@@ -1,15 +1,16 @@
-﻿use super::cursor::MultiNodeCursor;
+use super::cursor::MultiNodeCursor;
 use super::{BodyCursor, Cursor};
 use super::{DtError, PropCursor, RefDtb, RegConfig};
 
 use core::marker::PhantomData;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ValueCursor {
     Body(BodyCursor),
     Prop(BodyCursor, PropCursor),
     Node(MultiNodeCursor),
+    NodeIn(MultiNodeCursor),
 }
 
 #[derive(Clone, Copy)]
@@ -208,8 +209,9 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
                     visitor.visit_some(self)
                 }
             }
-            ValueCursor::Node(_) => visitor.visit_some(self),
+            ValueCursor::NodeIn(_) => visitor.visit_some(self),
             ValueCursor::Body(_) => visitor.visit_some(self),
+            ValueCursor::Node(_) => unreachable!("Node to option(NodeIn instead)"),
         }
     }
 
@@ -251,7 +253,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     {
         use super::{StructAccess, StructAccessType, Temp};
         match self.cursor {
-            ValueCursor::Node(result) => {
+            ValueCursor::NodeIn(result) => {
                 let mut start_cursor = result.start_cursor;
                 match start_cursor.move_on(self.dtb) {
                     Cursor::Title(c) => {
@@ -302,7 +304,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     {
         use super::{StructAccess, StructAccessType, Temp};
         match self.cursor {
-            ValueCursor::Node(_) => visitor.visit_map(StructAccess {
+            ValueCursor::NodeIn(_) => visitor.visit_map(StructAccess {
                 access_type: StructAccessType::Map(false),
                 temp: Temp::Uninit,
                 de: self,
@@ -313,6 +315,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
                 de: self,
             }),
             ValueCursor::Prop(_, _) => unreachable!("Prop -> map"),
+            ValueCursor::Node(_) => unreachable!("Node -> map (Use NodeIn instead)"),
         }
     }
 
@@ -327,7 +330,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
     {
         use super::{StructAccess, StructAccessType, Temp};
         match self.cursor {
-            ValueCursor::Node(_) => visitor.visit_map(StructAccess {
+            ValueCursor::NodeIn(_) => visitor.visit_map(StructAccess {
                 access_type: StructAccessType::Struct(fields),
                 temp: Temp::Uninit,
                 de: self,
@@ -338,6 +341,7 @@ impl<'de> de::Deserializer<'de> for &mut ValueDeserializer<'de> {
                 de: self,
             }),
             ValueCursor::Prop(_, _) => unreachable!("Prop -> struct {_name}"),
+            ValueCursor::Node(_) => unreachable!("Node -> struct {_name} (Use NodeIn instead)"),
         }
     }
 

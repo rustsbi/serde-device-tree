@@ -1,8 +1,11 @@
-﻿use super::{BodyCursor, Cursor, PropCursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
+use super::{
+    BodyCursor, Cursor, MultiNodeCursor, PropCursor, RefDtb, RegConfig, ValueCursor,
+    ValueDeserializer,
+};
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use serde::de::MapAccess;
-use serde::{de, Deserialize};
+use serde::{Deserialize, Serialize, de};
 
 // TODO: Spec 2.3.5 said that we should not inherited from ancestors and the size-cell &
 // address-cells should only used for current node's children.
@@ -27,7 +30,7 @@ pub struct NodeIter<'de, 'b> {
 pub struct NodeItem<'de> {
     dtb: RefDtb<'de>,
     reg: RegConfig,
-    node: BodyCursor,
+    node: MultiNodeCursor,
     name: &'de str,
 }
 
@@ -81,6 +84,16 @@ impl<'de> Node<'de> {
     pub fn get_prop<'b>(&'b self, name: &str) -> Option<PropItem<'b>> {
         self.props().find(|prop| prop.get_name() == name)
     }
+
+    pub fn name(&self) -> &'de str {
+        let cursor = self.cursor.clone().move_on(self.dtb);
+        if let Cursor::Title(c) = cursor {
+            let (name, _) = c.split_on(self.dtb);
+            name
+        } else {
+            todo!();
+        }
+    }
 }
 
 impl Debug for Node<'_> {
@@ -128,10 +141,10 @@ impl<'de> Iterator for NodeIter<'de, '_> {
                 let res = Some(Self::Item {
                     dtb,
                     reg: self.node.reg,
-                    node: node_cursor.skip_cursor,
+                    node: node_cursor,
                     name,
                 });
-                *cursor = node_cursor.next_cursor;
+                *cursor = node_cursor.skip_cursor;
                 res
             } else {
                 None
@@ -200,10 +213,9 @@ impl<'de> Deserialize<'de> for Node<'_> {
                     reg = Some(value.reg);
                     if key == "/" {
                         self_cursor = match value.cursor {
-                            ValueCursor::Body(cursor) => Some(cursor),
-                            ValueCursor::Node(result) => Some(result.next_cursor),
+                            ValueCursor::NodeIn(result) => Some(result.start_cursor),
                             _ => {
-                                unreachable!("root of NodeSeq shouble be body cursor")
+                                unreachable!("root of NodeSeq shouble be NodeIn cursor")
                             }
                         };
                         continue;
@@ -214,7 +226,7 @@ impl<'de> Deserialize<'de> for Node<'_> {
                                 props_start = Some(cursor);
                             }
                         }
-                        ValueCursor::Node(cursor) => {
+                        ValueCursor::NodeIn(cursor) => {
                             if nodes_start.is_none() {
                                 nodes_start = Some(cursor.start_cursor);
                             }
@@ -249,7 +261,7 @@ impl<'de> NodeItem<'de> {
         T::deserialize(&mut ValueDeserializer {
             dtb: self.dtb,
             reg: self.reg,
-            cursor: ValueCursor::Body(self.node),
+            cursor: ValueCursor::NodeIn(self.node),
         })
         .unwrap()
     }
@@ -271,13 +283,13 @@ impl<'de> NodeItem<'de> {
         }
     }
 
-    pub fn get_full_name(&self) -> &str {
+    pub fn get_full_name(&self) -> &'de str {
         self.name
     }
 }
 
 impl<'de> PropItem<'de> {
-    pub fn get_name(&self) -> &str {
+    pub fn get_name(&self) -> &'de str {
         self.name
     }
     pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
@@ -290,10 +302,36 @@ impl<'de> PropItem<'de> {
         .unwrap()
     }
 }
+impl<'se> Serialize for NodeItem<'se> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_newtype_struct(crate::de_mut::NODE_NODE_ITEM_NAME, self)
+    }
+}
+
+impl<'se> Serialize for PropItem<'se> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_bytes(self.prop.data_on(self.dtb))
+    }
+}
+
+impl<'se> Serialize for Node<'se> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_newtype_struct(crate::de_mut::NODE_NAME, self)
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use crate::{buildin::Node, from_raw_mut, Dtb, DtbPtr};
+    use crate::{Dtb, DtbPtr, buildin::Node, from_raw_mut};
     const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/hifive-unmatched-a00.dtb");
     const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();
     #[repr(align(8))]

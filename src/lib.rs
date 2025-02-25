@@ -20,6 +20,7 @@ extern crate alloc;
 
 pub mod de;
 pub mod error;
+pub mod ser;
 pub mod utils;
 
 mod common;
@@ -33,7 +34,7 @@ pub use value::compatible::Compatible;
 pub use de::from_raw;
 
 #[doc(inline)]
-pub use de_mut::{buildin, from_raw_mut, Dtb, DtbPtr};
+pub use de_mut::{Dtb, DtbPtr, buildin, from_raw_mut};
 
 #[doc(inline)]
 pub use error::Result;

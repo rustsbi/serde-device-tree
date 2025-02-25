@@ -1,6 +1,6 @@
 ﻿use super::{PropCursor, RefDtb, ValueCursor};
 use core::fmt::Debug;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// 一组 '\0' 分隔字符串的映射。
 ///
@@ -88,5 +88,15 @@ impl<'de> Iterator for StrSeqIter<'de> {
             // Remove \0 at end
             Some(unsafe { core::str::from_utf8_unchecked(&a[..a.len() - 1]) })
         }
+    }
+}
+
+impl<'se> Serialize for StrSeq<'se> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Pass bytes directly for StrSeq.
+        serializer.serialize_bytes(self.0.cursor.data_on(self.0.dtb))
     }
 }

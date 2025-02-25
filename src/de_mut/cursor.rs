@@ -1,4 +1,4 @@
-﻿use super::{DtError, RefDtb, StructureBlock, BLOCK_LEN};
+use super::{BLOCK_LEN, DtError, RefDtb, StructureBlock};
 use core::marker::PhantomData;
 
 #[derive(Clone, Copy, Debug)]
@@ -29,10 +29,10 @@ pub enum MoveResult {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct MultiNodeCursor {
+pub(crate) struct MultiNodeCursor {
     pub start_cursor: BodyCursor,
-    pub next_cursor: BodyCursor,
     pub skip_cursor: BodyCursor,
+    pub data_cursor: BodyCursor,
     #[allow(unused)]
     pub node_count: u32,
 }
@@ -51,6 +51,7 @@ impl<T: Type> AnyCursor<T> {
 
 impl BodyCursor {
     pub const ROOT: Self = Self(2, PhantomData);
+    pub const STARTER: Self = Self(0, PhantomData);
 
     /// 移动到下一个项目。
     pub fn move_on(&mut self, dtb: RefDtb) -> Cursor {
@@ -82,6 +83,7 @@ impl BodyCursor {
         }
         todo!()
     }
+
     /// 移动指针至下一块
     pub fn move_next(&mut self, dtb: RefDtb) -> MoveResult {
         use StructureBlock as B;
@@ -183,8 +185,8 @@ impl TitleCursor {
         }
         MultiNodeCursor {
             start_cursor: group,
-            next_cursor: body,
-            skip_cursor: title_body,
+            skip_cursor: body,
+            data_cursor: title_body,
             node_count: len,
         }
     }
@@ -201,8 +203,8 @@ impl TitleCursor {
         body.escape_from(dtb);
         MultiNodeCursor {
             start_cursor: origin,
-            next_cursor: body,
-            skip_cursor: node,
+            skip_cursor: body,
+            data_cursor: node,
             node_count: 1,
         }
     }

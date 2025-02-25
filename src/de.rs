@@ -68,23 +68,25 @@ pub unsafe fn from_raw<'de, T>(ptr: *const u8) -> Result<T>
 where
     T: de::Deserialize<'de>,
 {
-    // read header
-    if (ptr as usize) & (ALIGN - 1) != 0 {
-        return Err(Error::unaligned(ptr as usize));
-    }
-    let header = &*(ptr as *const Header);
-    header.verify()?;
+    unsafe {
+        // read header
+        if (ptr as usize) & (ALIGN - 1) != 0 {
+            return Err(Error::unaligned(ptr as usize));
+        }
+        let header = &*(ptr as *const Header);
+        header.verify()?;
 
-    let total_size = u32::from_be(header.total_size);
-    let raw_data_len = (total_size - HEADER_LEN) as usize;
-    let ans_ptr = core::ptr::from_raw_parts(ptr, raw_data_len);
-    let device_tree: &DeviceTree = &*ans_ptr;
-    let tags = device_tree.tags();
-    let mut d = Deserializer {
-        tags: tags.peekable(),
-    };
-    let ret = T::deserialize(&mut d)?;
-    Ok(ret)
+        let total_size = u32::from_be(header.total_size);
+        let raw_data_len = (total_size - HEADER_LEN) as usize;
+        let ans_ptr = core::ptr::from_raw_parts(ptr, raw_data_len);
+        let device_tree: &DeviceTree = &*ans_ptr;
+        let tags = device_tree.tags();
+        let mut d = Deserializer {
+            tags: tags.peekable(),
+        };
+        let ret = T::deserialize(&mut d)?;
+        Ok(ret)
+    }
 }
 
 #[derive(Debug)]

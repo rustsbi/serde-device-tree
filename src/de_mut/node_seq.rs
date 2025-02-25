@@ -1,7 +1,7 @@
 use super::{BodyCursor, Cursor, RefDtb, RegConfig, ValueCursor, ValueDeserializer};
 use core::{fmt::Debug, marker::PhantomData};
 use serde::de::SeqAccess;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 
 /// 一组名字以 `@...` 区分，同类、同级且连续的节点的映射。
 ///
@@ -140,12 +140,12 @@ impl<'de> Iterator for NodeSeqIter<'de, '_> {
                         return None;
                     }
 
-                    self.de.cursor = ValueCursor::Body(node_reuslt.next_cursor);
+                    self.de.cursor = ValueCursor::Body(node_reuslt.skip_cursor);
 
                     Some(Self::Item {
                         dtb: self.de.dtb,
                         reg: self.de.reg,
-                        body: node_reuslt.skip_cursor,
+                        body: node_reuslt.data_cursor,
                         at: suf_name,
                     })
                 }
@@ -177,7 +177,7 @@ impl<'de> NodeSeqItem<'de> {
 #[cfg(test)]
 mod tests {
     use crate::buildin::{NodeSeq, Reg};
-    use crate::{from_raw_mut, Dtb, DtbPtr};
+    use crate::{Dtb, DtbPtr, from_raw_mut};
     use serde_derive::Deserialize;
 
     const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/bl808.dtb");

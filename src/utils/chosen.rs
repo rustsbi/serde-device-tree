@@ -38,7 +38,7 @@ impl<'de> Node<'de> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{buildin::Node, from_raw_mut, Dtb, DtbPtr};
+    use crate::{Dtb, DtbPtr, buildin::Node, from_raw_mut};
 
     const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/bl808.dtb");
     const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();

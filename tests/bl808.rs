@@ -1,7 +1,7 @@
 // 在实际使用中，将这里的 `serde_derive::Deserialize` 改为 `serde::Deserialize`。
 use serde_derive::Deserialize;
 
-use serde_device_tree::{buildin::NodeSeq, error::Error, from_raw_mut, Dtb, DtbPtr};
+use serde_device_tree::{Dtb, DtbPtr, buildin::NodeSeq, error::Error, from_raw_mut};
 
 const RAW_DEVICE_TREE: &[u8] = include_bytes!("../examples/bl808.dtb");
 const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();

@@ -1,5 +1,5 @@
-﻿use crate::{
-    common::{Header, ALIGN},
+use crate::{
+    common::{ALIGN, Header},
     error::Error as DtError,
 };
 use core::{cell::RefCell, fmt::Display};

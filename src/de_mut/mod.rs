@@ -1,4 +1,4 @@
-﻿//! Deserialize device tree data to a Rust data structure,
+//! Deserialize device tree data to a Rust data structure,
 //! the memory region contains dtb file should be mutable.
 
 use crate::error::Error as DtError;
@@ -7,7 +7,7 @@ use serde::de;
 mod cursor;
 mod data;
 // mod group;
-mod node;
+pub(crate) mod node;
 mod node_seq;
 mod reg;
 mod str_seq;
@@ -16,17 +16,20 @@ mod struct_access;
 mod structs;
 
 const VALUE_DESERIALIZER_NAME: &str = "$serde_device_tree$de_mut$ValueDeserializer";
+pub(crate) const NODE_NAME: &str = "$serde_device_tree$de_mut$Node";
+pub(crate) const NODE_NODE_ITEM_NAME: &str = "$serde_device_tree$de_mut$Node$NodeItem";
+pub(crate) const NODE_PROP_ITEM_NAME: &str = "$serde_device_tree$de_mut$Node$PropItem";
 
 pub use structs::{Dtb, DtbPtr};
 pub mod buildin {
     pub use super::{node::Node, node_seq::NodeSeq, reg::Reg, str_seq::StrSeq};
 }
 
-use cursor::{BodyCursor, Cursor, PropCursor};
+use cursor::{BodyCursor, Cursor, MultiNodeCursor, PropCursor};
 use data::{ValueCursor, ValueDeserializer};
 use reg::RegConfig;
 use struct_access::{StructAccess, StructAccessType, Temp};
-use structs::{RefDtb, StructureBlock, BLOCK_LEN};
+use structs::{BLOCK_LEN, RefDtb, StructureBlock};
 
 /// 从 [`RefDtb`] 反序列化一个描述设备树的 `T` 类型实例。
 ///
@@ -41,7 +44,12 @@ where
     let mut d = ValueDeserializer {
         dtb,
         reg: RegConfig::DEFAULT,
-        cursor: ValueCursor::Body(BodyCursor::ROOT),
+        cursor: ValueCursor::NodeIn(MultiNodeCursor {
+            start_cursor: BodyCursor::STARTER,
+            skip_cursor: BodyCursor::ROOT, // This item will never be used.
+            data_cursor: BodyCursor::ROOT,
+            node_count: 1,
+        }),
     };
     T::deserialize(&mut d).and_then(|t| {
         // 解析必须完成
