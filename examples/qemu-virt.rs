@@ -1,8 +1,7 @@
 //! 这是一个 `from_raw_mut` 反序列化设备树的示例。不需要 `alloc`。
 // extern crate alloc;
 
-// 在实际使用中，将这里的 `serde_derive::Deserialize` 改为 `serde::Deserialize`。
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 // - `DtbPtr`: 验证设备树首部正确性，后续也可借助这个类型传递设备树，多次解析不必重复验证。
 // - `Dtb`: 管理反序列化出的类型生命周期。

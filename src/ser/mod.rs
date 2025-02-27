@@ -39,8 +39,7 @@ where
     let writer_len = writer.len();
     let (data_block, string_block) = writer.split_at_mut(writer.len() - offset);
     let (header, data_block) = data_block.split_at_mut(HEADER_LEN as usize + RSVMAP_LEN);
-    let struct_len;
-    {
+    let struct_len = {
         let mut patch_list = crate::ser::patch::PatchList::new(list);
         let mut block = crate::ser::string_block::StringBlock::new(string_block, &mut offset);
         let mut dst = crate::ser::pointer::Pointer::new(Some(data_block));
@@ -48,8 +47,8 @@ where
             crate::ser::serializer::Serializer::new(&mut dst, &mut block, &mut patch_list);
         data.serialize(&mut ser)?;
         ser.dst.step_by_u32(FDT_END);
-        struct_len = ser.dst.get_offset();
-    }
+        ser.dst.get_offset()
+    };
     // Make header
     {
         let header = unsafe { &mut *(header.as_mut_ptr() as *mut Header) };

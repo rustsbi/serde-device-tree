@@ -55,7 +55,7 @@ impl<'de, const T: usize> Iterator for MatrixItem<'de, T> {
     }
 }
 
-impl<'de, const T: usize> Deserialize<'de> for Matrix<'de, T> {
+impl<'de, const T: usize> Deserialize<'de> for Matrix<'_, T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -95,7 +95,7 @@ impl<const T: usize> Serialize for Matrix<'_, T> {
 mod tests {
     use super::Matrix;
     use crate::{Dtb, DtbPtr, buildin::Node, from_raw_mut};
-    use serde_derive::Serialize;
+    use serde::Serialize;
 
     const MAX_SIZE: usize = 256;
     #[test]

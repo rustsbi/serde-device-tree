@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
-use serde_derive::Deserialize;
+use serde::Deserialize;
 use serde_device_tree::Compatible;
 
 #[derive(Debug, Deserialize)]
