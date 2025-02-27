@@ -39,6 +39,7 @@ where
     let writer_len = writer.len();
     let (data_block, string_block) = writer.split_at_mut(writer.len() - offset);
     let (header, data_block) = data_block.split_at_mut(HEADER_LEN as usize + RSVMAP_LEN);
+    let struct_len;
     {
         let mut patch_list = crate::ser::patch::PatchList::new(list);
         let mut block = crate::ser::string_block::StringBlock::new(string_block, &mut offset);
@@ -47,6 +48,7 @@ where
             crate::ser::serializer::Serializer::new(&mut dst, &mut block, &mut patch_list);
         data.serialize(&mut ser)?;
         ser.dst.step_by_u32(FDT_END);
+        struct_len = ser.dst.get_offset();
     }
     // Make header
     {
@@ -60,7 +62,7 @@ where
         header.last_comp_version = u32::from_be(SUPPORTED_VERSION); // TODO: maybe 16
         header.boot_cpuid_phys = 0; // TODO: wtf is this prop
         header.size_dt_strings = u32::from_be(offset as u32);
-        header.size_dt_struct = u32::from_be(data_block.len() as u32); // TODO: correct?
+        header.size_dt_struct = u32::from_be(struct_len as u32);
     }
     Ok(())
 }
