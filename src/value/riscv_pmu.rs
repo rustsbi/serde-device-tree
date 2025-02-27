@@ -1,3 +1,5 @@
+/// This module implement prop value described in
+/// https://www.kernel.org/doc/Documentation/devicetree/bindings/perf/riscv%2Cpmu.yaml
 use crate::buildin::*;
 
 use serde::{Deserialize, Serialize};
@@ -20,18 +22,22 @@ pub struct EventToMhpmcounters<'a>(Matrix<'a, 3>);
 pub struct RawEventToMhpcounters<'a>(Matrix<'a, 5>);
 
 impl EventToMhpmevent<'_> {
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    #[inline(always)]
     pub fn get_event_id(&self, i: usize) -> u32 {
         u32::from_be(self.0.get(i)[0])
     }
 
+    #[inline(always)]
     pub fn get_selector_value(&self, i: usize) -> u64 {
         let current = self.0.get(i);
         ((u32::from_be(current[1]) as u64) << 32) | (u32::from_be(current[2]) as u64)
@@ -39,19 +45,23 @@ impl EventToMhpmevent<'_> {
 }
 
 impl EventToMhpmcounters<'_> {
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    #[inline(always)]
     pub fn get_event_idx_range(&self, i: usize) -> RangeInclusive<u32> {
         let current = self.0.get(i);
         u32::from_be(current[0])..=u32::from_be(current[1])
     }
 
+    #[inline(always)]
     pub fn get_counter_bitmap(&self, i: usize) -> u32 {
         let current = self.0.get(i);
         u32::from_be(current[2])
@@ -59,24 +69,29 @@ impl EventToMhpmcounters<'_> {
 }
 
 impl RawEventToMhpcounters<'_> {
+    #[inline(always)]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    #[inline(always)]
     pub fn get_event_idx_base(&self, i: usize) -> u64 {
         let current = self.0.get(i);
         ((u32::from_be(current[0]) as u64) << 32) | (u32::from_be(current[1]) as u64)
     }
 
+    #[inline(always)]
     pub fn get_event_idx_mask(&self, i: usize) -> u64 {
         let current = self.0.get(i);
         ((u32::from_be(current[2]) as u64) << 32) | (u32::from_be(current[3]) as u64)
     }
 
+    #[inline(always)]
     pub fn get_counter_bitmap(&self, i: usize) -> u32 {
         let current = self.0.get(i);
         u32::from_be(current[4])
