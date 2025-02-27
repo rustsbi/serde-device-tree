@@ -530,7 +530,7 @@ mod tests {
                 hello: 0xdeedbeef,
                 base1: ["Hello", "World!", "Again"],
             };
-            crate::ser::to_dtb(&base, &mut [], &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &[], &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?} {:x?}", buf1, buf2);
@@ -560,7 +560,7 @@ mod tests {
                 hello2: 0x11223344,
                 base2: Base1 { hello: "Roger" },
             };
-            crate::ser::to_dtb(&base, &mut [], &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &[], &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?} {:x?}", buf1, buf2);

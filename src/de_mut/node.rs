@@ -302,7 +302,7 @@ impl<'de> PropItem<'de> {
         .unwrap()
     }
 }
-impl<'se> Serialize for NodeItem<'se> {
+impl Serialize for NodeItem<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -311,7 +311,7 @@ impl<'se> Serialize for NodeItem<'se> {
     }
 }
 
-impl<'se> Serialize for PropItem<'se> {
+impl Serialize for PropItem<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -320,7 +320,7 @@ impl<'se> Serialize for PropItem<'se> {
     }
 }
 
-impl<'se> Serialize for Node<'se> {
+impl Serialize for Node<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,

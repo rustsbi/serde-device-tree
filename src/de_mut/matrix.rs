@@ -11,22 +11,40 @@ pub struct MatrixItem<'de, const T: usize> {
 }
 
 impl<'de, const T: usize> Matrix<'de, T> {
-    // Block size in bytes.
+    #[inline(always)]
     pub fn get_block_size() -> usize {
+        // Block size in bytes.
         T * 4
     }
 
+    #[inline(always)]
     pub fn iter(&self) -> MatrixItem<'de, T> {
         MatrixItem {
             offset: 0,
             data: self.data,
         }
     }
+
+    #[inline(always)]
+    pub fn len(&self) -> usize {
+        self.data.len() / T
+    }
+
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.data.len() != 0
+    }
+
+    #[inline(always)]
+    pub fn get(&self, i: usize) -> &'de [u32] {
+        &self.data[i * T..(i + 1) * T]
+    }
 }
 
 impl<'de, const T: usize> Iterator for MatrixItem<'de, T> {
     type Item = &'de [u32];
 
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.data.len() <= self.offset {
             return None;
@@ -51,7 +69,7 @@ impl<'de, const T: usize> Deserialize<'de> for Matrix<'de, T> {
             panic!("unaligned matrix");
         }
         let (prefix, data, suffix) = unsafe { data.align_to::<u32>() };
-        if prefix.len() != 0 || suffix.len() != 0 {
+        if !prefix.is_empty() || !suffix.is_empty() {
             panic!("Not support unaligned data");
         }
 
@@ -59,7 +77,7 @@ impl<'de, const T: usize> Deserialize<'de> for Matrix<'de, T> {
     }
 }
 
-impl<'se, const T: usize> Serialize for Matrix<'se, T> {
+impl<const T: usize> Serialize for Matrix<'_, T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,

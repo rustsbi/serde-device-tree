@@ -91,7 +91,7 @@ impl<'de> Iterator for StrSeqIter<'de> {
     }
 }
 
-impl<'se> Serialize for StrSeq<'se> {
+impl Serialize for StrSeq<'_> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
