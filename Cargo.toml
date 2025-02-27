@@ -15,11 +15,11 @@ edition = "2024"
 
 [dependencies]
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-erased-serde = { version = "0.4", optional = true }
+dyn_serde = { version = "1.0.2", default-features = false, optional = true }
 
 [features]
 default = ["std", "ser"]
 
-ser = ["dep:erased-serde"]
+ser = ["dep:dyn_serde"]
 std = ["serde/std"]
 alloc = ["serde/alloc"]

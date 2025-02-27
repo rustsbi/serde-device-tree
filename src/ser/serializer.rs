@@ -446,6 +446,14 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         todo!("struct variant");
     }
+
+    #[cfg(not(feature = "std"))]
+    fn collect_str<T>(self, _value: &T) -> Result<Self::Ok, Self::Error>
+    where
+        T: ?Sized + core::fmt::Display,
+    {
+        todo!()
+    }
 }
 
 #[cfg(test)]

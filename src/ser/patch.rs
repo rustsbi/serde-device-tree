@@ -4,7 +4,7 @@ use core::cell::Cell;
 /// Since this crate is mostly work with `noalloc`, we use `Patch` and `PatchList` for change or
 /// add on a dtb.
 pub struct Patch<'se> {
-    pub data: &'se dyn erased_serde::Serialize,
+    pub data: &'se dyn dyn_serde::Serialize,
     name: &'se str,
 
     /// This patch match how many item between its path and serializer.
@@ -15,7 +15,7 @@ pub struct Patch<'se> {
 
 impl<'se> Patch<'se> {
     #[inline(always)]
-    pub fn new(name: &'se str, data: &'se dyn erased_serde::Serialize) -> Patch<'se> {
+    pub fn new(name: &'se str, data: &'se dyn dyn_serde::Serialize) -> Patch<'se> {
         Patch {
             name,
             data,
@@ -51,7 +51,7 @@ impl<'se> Patch<'se> {
     pub fn serialize(&self, serializer: &mut Serializer<'se>) {
         self.parsed.set(true);
         self.data
-            .erased_serialize(&mut <dyn erased_serde::Serializer>::erase(serializer))
+            .serialize_dyn(&mut <dyn dyn_serde::Serializer>::new(serializer))
             .unwrap();
     }
 }
