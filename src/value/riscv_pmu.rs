@@ -30,7 +30,7 @@ impl EventToMhpmevent<'_> {
 
     pub fn get_selector_value(&self, i: usize) -> u64 {
         let current = self.0.get(i);
-        ((u32::from_be(current[1]) as u64) << 32) | (u32::from_be(current[0]) as u64)
+        ((u32::from_be(current[1]) as u64) << 32) | (u32::from_be(current[2]) as u64)
     }
 }
 
