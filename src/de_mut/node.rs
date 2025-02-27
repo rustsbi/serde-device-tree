@@ -54,10 +54,18 @@ pub struct PropItem<'de> {
 impl<'de> Node<'de> {
     pub fn deserialize<T: Deserialize<'de>>(&self) -> T {
         use super::ValueCursor;
+        let result = match self.cursor.clone().move_on(self.dtb) {
+            Cursor::Title(c) => {
+                let (name, _) = c.split_on(self.dtb);
+                let take_result = c.take_node_on(self.dtb, name);
+                take_result
+            }
+            _ => unreachable!("Node's cursor should on its start"),
+        };
         T::deserialize(&mut ValueDeserializer {
             dtb: self.dtb,
             reg: self.reg,
-            cursor: ValueCursor::Body(self.cursor),
+            cursor: ValueCursor::NodeIn(result),
         })
         .unwrap()
     }
