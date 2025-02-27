@@ -20,6 +20,7 @@ extern crate alloc;
 
 pub mod de;
 pub mod error;
+#[cfg(feature = "ser")]
 pub mod ser;
 pub mod utils;
 pub mod value;

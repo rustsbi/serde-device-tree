@@ -73,7 +73,7 @@ pub enum Error {
 }
 
 impl core::fmt::Display for Error {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(formatter, "{:?}", self)
     }
 }
@@ -83,7 +83,7 @@ impl core::error::Error for Error {}
 impl serde::ser::Error for Error {
     fn custom<T>(_msg: T) -> Self
     where
-        T: std::fmt::Display,
+        T: core::fmt::Display,
     {
         Self::Unknown
     }

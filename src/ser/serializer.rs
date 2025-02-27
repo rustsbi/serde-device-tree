@@ -1,8 +1,8 @@
-use super::Error;
 use super::patch::PatchList;
 use super::pointer::Pointer;
 use super::string_block::StringBlock;
 use crate::common::*;
+use crate::ser::Error;
 
 #[derive(Clone, Copy)]
 // The enum for current parsing type.
