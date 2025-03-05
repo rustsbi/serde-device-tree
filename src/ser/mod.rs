@@ -39,7 +39,7 @@ where
     let writer_len = writer.len();
     let (data_block, string_block) = writer.split_at_mut(writer.len() - offset);
     let (header, data_block) = data_block.split_at_mut(HEADER_LEN as usize + RSVMAP_LEN);
-    {
+    let struct_len = {
         let mut patch_list = crate::ser::patch::PatchList::new(list);
         let mut block = crate::ser::string_block::StringBlock::new(string_block, &mut offset);
         let mut dst = crate::ser::pointer::Pointer::new(Some(data_block));
@@ -47,7 +47,8 @@ where
             crate::ser::serializer::Serializer::new(&mut dst, &mut block, &mut patch_list);
         data.serialize(&mut ser)?;
         ser.dst.step_by_u32(FDT_END);
-    }
+        ser.dst.get_offset()
+    };
     // Make header
     {
         let header = unsafe { &mut *(header.as_mut_ptr() as *mut Header) };
@@ -60,7 +61,7 @@ where
         header.last_comp_version = u32::from_be(SUPPORTED_VERSION); // TODO: maybe 16
         header.boot_cpuid_phys = 0; // TODO: wtf is this prop
         header.size_dt_strings = u32::from_be(offset as u32);
-        header.size_dt_struct = u32::from_be(data_block.len() as u32); // TODO: correct?
+        header.size_dt_struct = u32::from_be(struct_len as u32);
     }
     Ok(())
 }
@@ -71,7 +72,7 @@ pub enum Error {
 }
 
 impl core::fmt::Display for Error {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(formatter, "{:?}", self)
     }
 }
@@ -81,7 +82,7 @@ impl core::error::Error for Error {}
 impl serde::ser::Error for Error {
     fn custom<T>(_msg: T) -> Self
     where
-        T: std::fmt::Display,
+        T: core::fmt::Display,
     {
         Self::Unknown
     }

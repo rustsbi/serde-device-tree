@@ -1,4 +1,4 @@
-use serde_derive::Serialize;
+use serde::Serialize;
 use std::io::prelude::*;
 
 const MAX_SIZE: usize = 256 + 32;

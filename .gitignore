@@ -4,4 +4,6 @@ Cargo.lock
 
 # Visual Studio Code configuration files
 .vscode/
-*.dts
+
+*.dtb
+!examples/*.dtb

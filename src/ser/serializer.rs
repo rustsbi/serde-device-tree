@@ -1,8 +1,8 @@
-use super::Error;
 use super::patch::PatchList;
 use super::pointer::Pointer;
 use super::string_block::StringBlock;
 use crate::common::*;
+use crate::ser::Error;
 
 #[derive(Clone, Copy)]
 // The enum for current parsing type.
@@ -446,11 +446,19 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
     ) -> Result<Self::SerializeStructVariant, Self::Error> {
         todo!("struct variant");
     }
+
+    #[cfg(not(feature = "std"))]
+    fn collect_str<T>(self, _value: &T) -> Result<Self::Ok, Self::Error>
+    where
+        T: ?Sized + core::fmt::Display,
+    {
+        todo!()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use serde_derive::Serialize;
+    use serde::Serialize;
     const MAX_SIZE: usize = 256 + 32;
     #[test]
     fn base_ser_test() {
@@ -530,7 +538,7 @@ mod tests {
                 hello: 0xdeedbeef,
                 base1: ["Hello", "World!", "Again"],
             };
-            crate::ser::to_dtb(&base, &mut [], &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &[], &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?} {:x?}", buf1, buf2);
@@ -560,7 +568,7 @@ mod tests {
                 hello2: 0x11223344,
                 base2: Base1 { hello: "Roger" },
             };
-            crate::ser::to_dtb(&base, &mut [], &mut buf1).unwrap();
+            crate::ser::to_dtb(&base, &[], &mut buf1).unwrap();
         }
         // TODO: check buf1 buf2
         // println!("{:x?} {:x?}", buf1, buf2);

@@ -1,5 +1,4 @@
-// 在实际使用中，将这里的 `serde_derive::Deserialize` 改为 `serde::Deserialize`。
-use serde_derive::Deserialize;
+use serde::Deserialize;
 
 use serde_device_tree::{Dtb, DtbPtr, buildin::NodeSeq, error::Error, from_raw_mut};
 

@@ -178,7 +178,7 @@ impl<'de> NodeSeqItem<'de> {
 mod tests {
     use crate::buildin::{NodeSeq, Reg};
     use crate::{Dtb, DtbPtr, from_raw_mut};
-    use serde_derive::Deserialize;
+    use serde::Deserialize;
 
     const RAW_DEVICE_TREE: &[u8] = include_bytes!("../../examples/bl808.dtb");
     const BUFFER_SIZE: usize = RAW_DEVICE_TREE.len();

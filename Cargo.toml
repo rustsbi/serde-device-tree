@@ -14,14 +14,12 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0", default-features = false }
-erased-serde = "0.4"
-
-[dev-dependencies]
-serde_derive = "1.0"
+serde = { version = "1.0", default-features = false, features = ["derive"] }
+dyn_serde = { version = "1.0.2", default-features = false, optional = true }
 
 [features]
-default = ["std"]
+default = ["std", "ser"]
 
+ser = ["dep:dyn_serde"]
 std = ["serde/std"]
 alloc = ["serde/alloc"]

@@ -7,6 +7,7 @@ use serde::de;
 mod cursor;
 mod data;
 // mod group;
+mod matrix;
 pub(crate) mod node;
 mod node_seq;
 mod reg;
@@ -18,11 +19,11 @@ mod structs;
 const VALUE_DESERIALIZER_NAME: &str = "$serde_device_tree$de_mut$ValueDeserializer";
 pub(crate) const NODE_NAME: &str = "$serde_device_tree$de_mut$Node";
 pub(crate) const NODE_NODE_ITEM_NAME: &str = "$serde_device_tree$de_mut$Node$NodeItem";
-pub(crate) const NODE_PROP_ITEM_NAME: &str = "$serde_device_tree$de_mut$Node$PropItem";
+// pub(crate) const NODE_PROP_ITEM_NAME: &str = "$serde_device_tree$de_mut$Node$PropItem";
 
 pub use structs::{Dtb, DtbPtr};
 pub mod buildin {
-    pub use super::{node::Node, node_seq::NodeSeq, reg::Reg, str_seq::StrSeq};
+    pub use super::{matrix::Matrix, node::Node, node_seq::NodeSeq, reg::Reg, str_seq::StrSeq};
 }
 
 use cursor::{BodyCursor, Cursor, MultiNodeCursor, PropCursor};

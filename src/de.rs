@@ -42,7 +42,7 @@ use serde::de;
 /// # });
 /// # aligned_data.data[..BUFFER_SIZE].clone_from_slice(RAW_DEVICE_TREE);
 /// # let fdt_ptr = aligned_data.data.as_ptr();
-/// use serde_derive::Deserialize;
+/// use serde::Deserialize;
 ///
 /// #[derive(Debug, Deserialize)]
 /// struct Tree<'a> {
@@ -516,7 +516,7 @@ mod tests {
     #[cfg(feature = "alloc")]
     use alloc::format;
     #[cfg(any(feature = "std", feature = "alloc"))]
-    use serde_derive::Deserialize;
+    use serde::Deserialize;
     #[cfg(feature = "std")]
     use std::format;
 

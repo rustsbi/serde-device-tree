@@ -20,13 +20,14 @@ extern crate alloc;
 
 pub mod de;
 pub mod error;
+#[cfg(feature = "ser")]
 pub mod ser;
 pub mod utils;
+pub mod value;
 
 mod common;
 mod de_mut;
 mod tag;
-mod value;
 
 pub use value::compatible::Compatible;
 
