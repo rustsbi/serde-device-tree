@@ -1,11 +1,13 @@
 use super::serializer::Serializer;
+use super::serializer::ValueType;
 use core::cell::Cell;
 
 /// Since this crate is mostly work with `noalloc`, we use `Patch` and `PatchList` for change or
 /// add on a dtb.
 pub struct Patch<'se> {
-    pub data: &'se dyn dyn_serde::Serialize,
     name: &'se str,
+    pub data: &'se dyn dyn_serde::Serialize,
+    pub patch_type: ValueType,
 
     /// This patch match how many item between its path and serializer.
     matched_depth: Cell<usize>,
@@ -13,13 +15,29 @@ pub struct Patch<'se> {
     parsed: Cell<bool>,
 }
 
+impl core::fmt::Debug for Patch<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("")
+            .field("name", &self.name)
+            .field("patch_type", &self.patch_type)
+            .field("matched_depth", &self.matched_depth)
+            .field("parsed", &self.parsed)
+            .finish()
+    }
+}
+
 impl<'se> Patch<'se> {
     #[inline(always)]
-    pub fn new(name: &'se str, data: &'se dyn dyn_serde::Serialize) -> Patch<'se> {
+    pub fn new(
+        name: &'se str,
+        data: &'se dyn dyn_serde::Serialize,
+        patch_type: ValueType,
+    ) -> Patch<'se> {
         Patch {
             name,
             data,
-            matched_depth: Cell::new(0),
+            patch_type,
+            matched_depth: Cell::new(1),
             parsed: Cell::new(false),
         }
     }
@@ -27,7 +45,7 @@ impl<'se> Patch<'se> {
     #[inline(always)]
     /// Reset the status of patch.
     pub fn init(&self) {
-        self.matched_depth.set(0);
+        self.matched_depth.set(1);
         self.parsed.set(false);
     }
 
@@ -38,17 +56,14 @@ impl<'se> Patch<'se> {
 
     #[inline(always)]
     pub fn get_depth_path(&self, x: usize) -> &'se str {
-        if x == 0 {
-            return "";
-        }
-        self.name.split('/').nth(x).unwrap_or_default()
+        self.name.split('/').nth(x - 1).unwrap_or_default()
     }
 
     // I hope to impl serde::ser::Serializer, but erase_serialize's return value is different from
     // normal serialize, so we do this.
     /// Serialize this patch with serializer.
     #[inline(always)]
-    pub fn serialize(&self, serializer: &mut Serializer<'se>) {
+    pub fn serialize(&self, serializer: Serializer<'_, 'se>) {
         self.parsed.set(true);
         self.data
             .serialize_dyn(&mut <dyn dyn_serde::Serializer>::new(serializer))
@@ -57,6 +72,7 @@ impl<'se> Patch<'se> {
 }
 
 /// Here is a list of `Patch`, and have some methods for update `Patch` status.
+#[derive(Debug)]
 pub struct PatchList<'se> {
     list: &'se [Patch<'se>],
 }
@@ -64,11 +80,12 @@ pub struct PatchList<'se> {
 impl<'se> PatchList<'se> {
     #[inline(always)]
     pub fn new(list: &'se [Patch<'se>]) -> PatchList<'se> {
+        list.iter().for_each(|x| x.init());
         PatchList { list }
     }
 
     #[inline(always)]
-    pub fn step_forward(&self, name: &'se str, depth: usize) -> Option<&'se Patch<'se>> {
+    pub fn step_forward(&self, name: &str, depth: usize) -> Option<&'se Patch<'se>> {
         let mut matched_patch = None;
         self.list.iter().for_each(|patch| {
             if patch.matched_depth.get() == depth - 1 && patch.get_depth_path(depth) == name {

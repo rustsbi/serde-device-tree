@@ -1,3 +1,4 @@
+use serde_device_tree::ser::{patch::Patch, serializer::ValueType};
 use serde_device_tree::{Dtb, DtbPtr, buildin::Node, error::Error, from_raw_mut};
 
 use std::io::prelude::*;
@@ -21,7 +22,8 @@ fn main() -> Result<(), Error> {
     let dtb = Dtb::from(ptr).share();
 
     let root: Node = from_raw_mut(&dtb).unwrap();
-    serde_device_tree::ser::to_dtb(&root, &[], &mut buf).unwrap();
+    let patch: Patch = Patch::new("/chosen/a", &"1", ValueType::Prop);
+    serde_device_tree::ser::to_dtb(&root, &[patch], &mut buf).unwrap();
 
     let mut file = std::fs::File::create("gen.dtb").unwrap();
     file.write_all(&buf).unwrap();

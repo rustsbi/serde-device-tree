@@ -25,8 +25,9 @@ where
         let mut patch_list = crate::ser::patch::PatchList::new(list);
         let mut block = crate::ser::string_block::StringBlock::new(writer, &mut offset);
         let mut ser =
-            crate::ser::serializer::Serializer::new(&mut dst, &mut block, &mut patch_list);
-        data.serialize(&mut ser)?;
+            crate::ser::serializer::SerializerInner::new(&mut dst, &mut block, &mut patch_list);
+        let ser = crate::ser::serializer::Serializer::new(&mut ser);
+        data.serialize(ser)?;
     };
     list.iter().for_each(|patch| patch.init());
     // Write from bottom to top, to avoid overlap.
@@ -44,11 +45,11 @@ where
         let mut block = crate::ser::string_block::StringBlock::new(string_block, &mut offset);
         let mut dst = crate::ser::pointer::Pointer::new(Some(data_block));
         let mut ser =
-            crate::ser::serializer::Serializer::new(&mut dst, &mut block, &mut patch_list);
-        data.serialize(&mut ser)?;
-        ser.dst.step_by_u32(FDT_END);
-        ser.dst.get_offset()
-    };
+            crate::ser::serializer::SerializerInner::new(&mut dst, &mut block, &mut patch_list);
+        let ser = crate::ser::serializer::Serializer::new(&mut ser);
+        data.serialize(ser)?
+    }
+    .1;
     // Make header
     {
         let header = unsafe { &mut *(header.as_mut_ptr() as *mut Header) };

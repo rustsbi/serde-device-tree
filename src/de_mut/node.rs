@@ -57,8 +57,8 @@ impl<'de> Node<'de> {
         let result = match self.cursor.clone().move_on(self.dtb) {
             Cursor::Title(c) => {
                 let (name, _) = c.split_on(self.dtb);
-                let take_result = c.take_node_on(self.dtb, name);
-                take_result
+
+                c.take_node_on(self.dtb, name)
             }
             _ => unreachable!("Node's cursor should on its start"),
         };
@@ -333,7 +333,15 @@ impl Serialize for Node<'_> {
     where
         S: serde::Serializer,
     {
-        serializer.serialize_newtype_struct(crate::de_mut::NODE_NAME, self)
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(None)?;
+        for prop in self.props() {
+            map.serialize_entry(prop.get_name(), &prop)?;
+        }
+        for node in self.nodes() {
+            map.serialize_entry(node.get_full_name(), &node.deserialize::<Node>())?;
+        }
+        map.end()
     }
 }
 
