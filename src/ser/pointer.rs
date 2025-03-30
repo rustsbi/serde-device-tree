@@ -31,10 +31,12 @@ impl<'se> Pointer<'se> {
         }
     }
 
+    /// Create a PROP header with nop padding, return the offset of `FDT_PROP` token.
     #[inline(always)]
     pub fn step_by_prop(&mut self) -> usize {
         self.step_by_u32(FDT_PROP);
         let offset = self.offset;
+        // Put 2 nop as `name` and `nameoff`.
         self.step_by_u32(FDT_NOP); // When create prop header, we do not know how long of the prop value.
         self.step_by_u32(FDT_NOP); // We can not assume this is a prop, so nop for default.
         offset

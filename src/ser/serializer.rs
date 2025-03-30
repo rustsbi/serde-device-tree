@@ -1,152 +1,242 @@
-use super::patch::PatchList;
+use super::patch::{Patch, PatchList};
 use super::pointer::Pointer;
 use super::string_block::StringBlock;
 use crate::common::*;
 use crate::ser::Error;
 
-#[derive(Clone, Copy)]
 // The enum for current parsing type.
-enum ValueType {
+#[derive(Clone, Copy, Debug)]
+pub enum ValueType {
     Node,
     Prop,
 }
 
-/// Serializer
+/// SerializerInner
 /// - `dst`: Pointer of distance &[u8] and the ref of &[u8].
-/// - `current_value_type`, `current_name`, `current_dep`: For recursive.
-pub struct Serializer<'se> {
+pub struct SerializerInner<'se> {
     pub dst: &'se mut Pointer<'se>,
     string_block: &'se mut StringBlock<'se>,
     patch_list: &'se mut PatchList<'se>,
+}
 
-    current_value_type: ValueType,
+/// Serializer
+/// - `ser`: all mutable reference of result.
+pub struct Serializer<'a, 'se> {
+    pub ser: &'a mut SerializerInner<'se>,
+
+    prop_token_offset: usize,
+    overwrite_patch: Option<&'se Patch<'se>>,
     current_name: &'se str,
     current_dep: usize,
 }
 
-impl<'se> Serializer<'se> {
+impl<'se> SerializerInner<'se> {
     #[inline(always)]
     pub fn new(
         dst: &'se mut Pointer<'se>,
-        cache: &'se mut StringBlock<'se>,
+        string_block: &'se mut StringBlock<'se>,
         patch_list: &'se mut PatchList<'se>,
-    ) -> Serializer<'se> {
-        Serializer {
+    ) -> Self {
+        Self {
             dst,
-            string_block: cache,
-            current_dep: 0,
-            current_name: "",
-            current_value_type: ValueType::Node,
+            string_block,
             patch_list,
         }
     }
 }
 
+impl<'a, 'se> Serializer<'a, 'se> {
+    #[inline(always)]
+    pub fn new(inner: &'a mut SerializerInner<'se>) -> Self {
+        Serializer {
+            ser: inner,
+
+            current_dep: 0,
+            current_name: "",
+            prop_token_offset: 0,
+            overwrite_patch: None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_next(self) -> Serializer<'a, 'se> {
+        Serializer {
+            ser: self.ser,
+            current_dep: self.current_dep + 1,
+            current_name: self.current_name,
+            prop_token_offset: 0,
+            overwrite_patch: None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_next_ref<'b>(&'b mut self) -> Serializer<'b, 'se> {
+        Serializer {
+            ser: self.ser,
+            current_dep: self.current_dep + 1,
+            current_name: self.current_name,
+            prop_token_offset: 0,
+            overwrite_patch: None,
+        }
+    }
+}
+
 trait SerializeDynamicField<'se> {
+    fn start_node(&mut self) -> Result<(), Error>;
+    fn end_node(&mut self) -> Result<(), Error>;
+    fn serialize_field_meta(&mut self, key: &'se str) -> Result<(), Error>;
+    fn serialize_field_data<T>(&mut self, value: &T) -> Result<(), Error>
+    where
+        T: serde::ser::Serialize + ?Sized;
     fn serialize_dynamic_field<T>(&mut self, key: &'se str, value: &T) -> Result<(), Error>
     where
         T: serde::ser::Serialize + ?Sized;
 }
 
-impl<'se> SerializeDynamicField<'se> for &mut Serializer<'se> {
+impl<'se> SerializeDynamicField<'se> for Serializer<'_, 'se> {
+    fn start_node(&mut self) -> Result<(), Error> {
+        self.ser.dst.step_by_u32(FDT_BEGIN_NODE);
+        if self.current_dep == 1 {
+            // The name of root node should be empty.
+            self.ser.dst.step_by_u32(0);
+        } else {
+            self.ser.dst.step_by_name(self.current_name);
+        }
+        self.ser.dst.step_align();
+
+        Ok(())
+    }
+    fn end_node(&mut self) -> Result<(), Error> {
+        for patch in self.ser.patch_list.add_list(self.current_dep) {
+            let key = patch.get_depth_path(self.current_dep + 1);
+            self.serialize_dynamic_field(key, patch.data)?;
+        }
+        self.ser.dst.step_by_u32(FDT_END_NODE);
+        if self.current_dep == 1 {
+            self.ser.dst.step_by_u32(FDT_END);
+        }
+
+        Ok(())
+    }
+    fn serialize_field_meta(&mut self, key: &'se str) -> Result<(), Error> {
+        self.prop_token_offset = self.ser.dst.step_by_prop();
+        self.current_name = key;
+        self.overwrite_patch = self.ser.patch_list.step_forward(key, self.current_dep);
+
+        Ok(())
+    }
+    fn serialize_field_data<T>(&mut self, value: &T) -> Result<(), Error>
+    where
+        T: serde::ser::Serialize + ?Sized,
+    {
+        let value_type = match self.overwrite_patch {
+            Some(data) => {
+                let ser = self.get_next_ref();
+                data.serialize(ser);
+                data.patch_type
+            }
+            None => {
+                let ser = self.get_next_ref();
+                value.serialize(ser)?.0
+            }
+        };
+
+        // We now know how long the prop value.
+        // TODO: make we have some better way than put nop, like move this block ahead.
+        if let ValueType::Node = value_type {
+            self.ser
+                .dst
+                .write_to_offset_u32(self.prop_token_offset - 4, FDT_NOP);
+        } else {
+            self.ser.dst.write_to_offset_u32(
+                self.prop_token_offset,
+                (self.ser.dst.get_offset() - self.prop_token_offset - 8) as u32,
+            );
+            self.ser.dst.write_to_offset_u32(
+                self.prop_token_offset + 4,
+                self.ser.string_block.find_or_insert(self.current_name) as u32,
+            );
+        }
+
+        self.ser.dst.step_align();
+
+        self.ser.patch_list.step_back(self.current_dep);
+
+        Ok(())
+    }
     fn serialize_dynamic_field<T>(&mut self, key: &'se str, value: &T) -> Result<(), Error>
     where
         T: serde::ser::Serialize + ?Sized,
     {
-        let prop_header_offset = self.dst.step_by_prop();
-
-        // Save prev
-        let prev_type = self.current_value_type;
-        let prev_name = self.current_name;
-        self.current_dep += 1;
-        self.current_name = key;
-        let matched_patch = self.patch_list.step_forward(key, self.current_dep);
-
-        match matched_patch {
-            Some(data) => {
-                data.serialize(self);
-            }
-            None => {
-                value.serialize(&mut **self)?;
-            }
-        }
-
-        // We now know how long the prop value.
-        // TODO: make we have some better way than put nop, like move this block ahead.
-        if let ValueType::Node = self.current_value_type {
-            self.dst
-                .write_to_offset_u32(prop_header_offset - 4, FDT_NOP);
-        } else {
-            self.dst.write_to_offset_u32(
-                prop_header_offset,
-                (self.dst.get_offset() - prop_header_offset - 8) as u32,
-            );
-            self.dst.write_to_offset_u32(
-                prop_header_offset + 4,
-                self.string_block.find_or_insert(key) as u32,
-            );
-        }
-
-        self.dst.step_align();
-
-        // Load prev
-        self.patch_list.step_back(self.current_dep);
-        self.current_value_type = prev_type;
-        self.current_name = prev_name;
-        self.current_dep -= 1;
-
+        self.serialize_field_meta(key)?;
+        self.serialize_field_data(value)?;
         Ok(())
     }
 }
 
-impl serde::ser::SerializeMap for &mut Serializer<'_> {
-    type Ok = ();
+impl serde::ser::SerializeMap for Serializer<'_, '_> {
+    type Ok = (ValueType, usize);
     type Error = Error;
+    fn serialize_entry<K, V>(&mut self, key: &K, value: &V) -> Result<(), Self::Error>
+    where
+        K: ?Sized + serde::ser::Serialize,
+        V: ?Sized + serde::ser::Serialize,
+    {
+        if core::any::type_name::<K>() != "str" {
+            panic!(
+                "map key must be a str, but here is {}",
+                core::any::type_name::<K>()
+            );
+        }
+        let key = unsafe { *(core::ptr::addr_of!(key) as *const &str) };
+        let mut ser = self.get_next_ref();
+        ser.serialize_field_meta(key)?;
+        ser.serialize_field_data(value)?;
+        Ok(())
+    }
 
     fn serialize_key<T>(&mut self, _input: &T) -> Result<(), Self::Error>
     where
         T: serde::ser::Serialize + ?Sized,
     {
-        todo!("map_key");
+        todo!("only support serialize_entry")
     }
 
     fn serialize_value<T>(&mut self, _value: &T) -> Result<(), Self::Error>
     where
         T: serde::ser::Serialize + ?Sized,
     {
-        todo!("map_value");
+        todo!("only support serialize_entry")
     }
 
-    fn end(self) -> Result<Self::Ok, Self::Error> {
-        todo!("map_end");
+    fn end(mut self) -> Result<Self::Ok, Self::Error> {
+        self.end_node()?;
+        Ok((ValueType::Node, self.ser.dst.get_offset()))
     }
 }
 
-impl serde::ser::SerializeStruct for &mut Serializer<'_> {
-    type Ok = ();
+impl serde::ser::SerializeStruct for Serializer<'_, '_> {
+    type Ok = (ValueType, usize);
     type Error = Error;
 
     fn serialize_field<T>(&mut self, key: &'static str, value: &T) -> Result<(), Self::Error>
     where
         T: serde::ser::Serialize + ?Sized,
     {
-        self.serialize_dynamic_field(key, value)?;
+        let mut ser = self.get_next_ref();
+        ser.serialize_dynamic_field(key, value)?;
 
         Ok(())
     }
 
     fn end(mut self) -> Result<Self::Ok, Self::Error> {
-        for patch in self.patch_list.add_list(self.current_dep) {
-            let key = patch.get_depth_path(self.current_dep + 1);
-            self.serialize_dynamic_field(key, patch.data)?;
-        }
-        self.dst.step_by_u32(FDT_END_NODE);
-        Ok(())
+        self.end_node()?;
+        Ok((ValueType::Node, self.ser.dst.get_offset()))
     }
 }
 
-impl serde::ser::SerializeStructVariant for &mut Serializer<'_> {
-    type Ok = ();
+impl serde::ser::SerializeStructVariant for Serializer<'_, '_> {
+    type Ok = (ValueType, usize);
     type Error = Error;
 
     fn serialize_field<T>(&mut self, _key: &'static str, _value: &T) -> Result<(), Self::Error>
@@ -161,42 +251,43 @@ impl serde::ser::SerializeStructVariant for &mut Serializer<'_> {
     }
 }
 
-impl serde::ser::SerializeSeq for &mut Serializer<'_> {
-    type Ok = ();
+impl serde::ser::SerializeSeq for Serializer<'_, '_> {
+    type Ok = (ValueType, usize);
     type Error = Error;
     // TODO: make sure there are no node seq serialize over this function.
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Error>
     where
         T: ?Sized + serde::ser::Serialize,
     {
-        value.serialize(&mut **self)
+        value.serialize(self.get_next_ref())?;
+        Ok(())
     }
 
-    // Close the sequence.
-    fn end(self) -> Result<(), Error> {
-        Ok(())
+    fn end(self) -> Result<Self::Ok, Error> {
+        // We think all seq we met is a prop.
+        Ok((ValueType::Prop, self.ser.dst.get_offset()))
     }
 }
 
-impl serde::ser::SerializeTuple for &mut Serializer<'_> {
-    type Ok = ();
+impl serde::ser::SerializeTuple for Serializer<'_, '_> {
+    type Ok = (ValueType, usize);
     type Error = Error;
 
     fn serialize_element<T>(&mut self, value: &T) -> Result<(), Error>
     where
         T: ?Sized + serde::ser::Serialize,
     {
-        value.serialize(&mut **self)
+        value.serialize(self.get_next_ref())?;
+        Ok(())
     }
 
-    // Close the sequence.
-    fn end(self) -> Result<(), Error> {
-        Ok(())
+    fn end(self) -> Result<Self::Ok, Error> {
+        Ok((ValueType::Prop, self.ser.dst.get_offset()))
     }
 }
 
-impl serde::ser::SerializeTupleVariant for &mut Serializer<'_> {
-    type Ok = ();
+impl serde::ser::SerializeTupleVariant for Serializer<'_, '_> {
+    type Ok = (ValueType, usize);
     type Error = Error;
 
     fn serialize_field<T>(&mut self, _value: &T) -> Result<(), Self::Error>
@@ -206,13 +297,13 @@ impl serde::ser::SerializeTupleVariant for &mut Serializer<'_> {
         todo!("tuple_variant_field");
     }
 
-    fn end(self) -> Result<(), Error> {
+    fn end(self) -> Result<Self::Ok, Error> {
         todo!("tuple_variant_end");
     }
 }
 
-impl serde::ser::SerializeTupleStruct for &mut Serializer<'_> {
-    type Ok = ();
+impl serde::ser::SerializeTupleStruct for Serializer<'_, '_> {
+    type Ok = (ValueType, usize);
     type Error = Error;
 
     fn serialize_field<T>(&mut self, _value: &T) -> Result<(), Self::Error>
@@ -222,13 +313,13 @@ impl serde::ser::SerializeTupleStruct for &mut Serializer<'_> {
         todo!("tuple_struct_field");
     }
 
-    fn end(self) -> Result<(), Error> {
+    fn end(self) -> Result<Self::Ok, Error> {
         todo!("tuple_struct_end");
     }
 }
 
-impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
-    type Ok = ();
+impl<'se> serde::ser::Serializer for Serializer<'_, 'se> {
+    type Ok = (ValueType, usize);
     type Error = Error;
     type SerializeSeq = Self;
     type SerializeMap = Self;
@@ -267,9 +358,8 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
     }
 
     fn serialize_u32(self, v: u32) -> Result<Self::Ok, Self::Error> {
-        self.current_value_type = ValueType::Prop;
-        self.dst.step_by_u32(v);
-        Ok(())
+        self.ser.dst.step_by_u32(v);
+        Ok((ValueType::Prop, self.ser.dst.get_offset()))
     }
 
     fn serialize_u64(self, _v: u64) -> Result<Self::Ok, Self::Error> {
@@ -289,18 +379,16 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
     }
 
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
-        self.current_value_type = ValueType::Prop;
         v.bytes().for_each(|x| {
-            self.dst.step_by_u8(x);
+            self.ser.dst.step_by_u8(x);
         });
-        self.dst.step_by_u8(0);
-        Ok(())
+        self.ser.dst.step_by_u8(0);
+        Ok((ValueType::Prop, self.ser.dst.get_offset()))
     }
 
     fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        self.current_value_type = ValueType::Prop;
-        v.iter().for_each(|x| self.dst.step_by_u8(*x));
-        Ok(())
+        v.iter().for_each(|x| self.ser.dst.step_by_u8(*x));
+        Ok((ValueType::Prop, self.ser.dst.get_offset()))
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
@@ -331,11 +419,7 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
         todo!("unit struct variant");
     }
 
-    fn serialize_newtype_struct<T>(
-        mut self,
-        name: &'static str,
-        v: &T,
-    ) -> Result<Self::Ok, Self::Error>
+    fn serialize_newtype_struct<T>(self, name: &'static str, v: &T) -> Result<Self::Ok, Self::Error>
     where
         T: serde::ser::Serialize + ?Sized,
     {
@@ -343,32 +427,7 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
         use crate::de_mut::{NODE_NAME, NODE_NODE_ITEM_NAME};
         use core::ptr::addr_of;
         match name {
-            NODE_NAME => {
-                // TODO: match level
-                self.current_value_type = ValueType::Node;
-                let v = unsafe { &*(addr_of!(v) as *const &Node<'se>) };
-                self.dst.step_by_u32(FDT_BEGIN_NODE);
-                if self.current_dep == 0 {
-                    // The name of root node should be empty.
-                    self.dst.step_by_u32(0);
-                } else {
-                    self.dst.step_by_name(v.name());
-                    self.dst.step_align();
-                }
-                for prop in v.props() {
-                    self.serialize_dynamic_field(prop.get_name(), &prop)?;
-                }
-                for node in v.nodes() {
-                    self.serialize_dynamic_field(
-                        node.get_full_name(),
-                        &node.deserialize::<Node>(),
-                    )?;
-                }
-                self.dst.step_by_u32(FDT_END_NODE);
-                Ok(())
-            }
             NODE_NODE_ITEM_NAME => {
-                self.current_value_type = ValueType::Node;
                 let v = unsafe { &*(addr_of!(v) as *const &NodeItem<'se>) };
                 self.serialize_newtype_struct(NODE_NAME, &v.deserialize::<Node>())
             }
@@ -390,7 +449,6 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
     }
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
-        self.current_value_type = ValueType::Prop;
         Ok(self)
     }
 
@@ -417,7 +475,9 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        todo!("map");
+        let mut ser = self.get_next();
+        ser.start_node()?;
+        Ok(ser)
     }
 
     fn serialize_struct(
@@ -425,16 +485,9 @@ impl<'se> serde::ser::Serializer for &mut Serializer<'se> {
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        self.dst.step_by_u32(FDT_BEGIN_NODE);
-        if self.current_dep == 0 {
-            // The name of root node should be empty.
-            self.dst.step_by_u32(0);
-        } else {
-            self.dst.step_by_name(self.current_name);
-        }
-        self.dst.step_align();
-        self.current_value_type = ValueType::Node;
-        Ok(self)
+        let mut ser = self.get_next();
+        ser.start_node()?;
+        Ok(ser)
     }
 
     fn serialize_struct_variant(
@@ -591,7 +644,11 @@ mod tests {
 
         {
             let number = 0x55667788u32;
-            let patch = crate::ser::patch::Patch::new("/hello", &number as _);
+            let patch = crate::ser::patch::Patch::new(
+                "/hello",
+                &number as _,
+                crate::ser::serializer::ValueType::Prop,
+            );
             let list = [patch];
             let base = Base {
                 hello: 0xdeedbeef,
@@ -626,7 +683,11 @@ mod tests {
             let new_base = Base1 {
                 hello: "replacement",
             };
-            let patch = crate::ser::patch::Patch::new("/hello", &new_base as _);
+            let patch = crate::ser::patch::Patch::new(
+                "/hello",
+                &new_base as _,
+                crate::ser::serializer::ValueType::Node,
+            );
             let list = [patch];
             let base = Base {
                 hello: 0xdeedbeef,
@@ -659,7 +720,11 @@ mod tests {
 
         {
             let new_base = Base1 { hello: "added" };
-            let patch = crate::ser::patch::Patch::new("/base3", &new_base as _);
+            let patch = crate::ser::patch::Patch::new(
+                "/base3",
+                &new_base as _,
+                crate::ser::serializer::ValueType::Node,
+            );
             let list = [patch];
             let base = Base {
                 hello: 0xdeedbeef,

@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::io::prelude::*;
 
+use serde_device_tree::ser::serializer::ValueType;
+
 const MAX_SIZE: usize = 256 + 32;
 
 fn main() {
@@ -19,7 +21,8 @@ fn main() {
 
     {
         let new_base = Base1 { hello: "added" };
-        let patch = serde_device_tree::ser::patch::Patch::new("/base3", &new_base as _);
+        let patch =
+            serde_device_tree::ser::patch::Patch::new("/base3", &new_base as _, ValueType::Node);
         let list = [patch];
         let base = Base {
             hello: 0xdeedbeef,
