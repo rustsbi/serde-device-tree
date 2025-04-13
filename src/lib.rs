@@ -12,7 +12,6 @@
 //! one with no-std support,
 //! the other one doesn't even need alloc.
 
-#![feature(ptr_metadata)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(feature = "alloc")]
