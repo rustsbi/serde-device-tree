@@ -3,7 +3,7 @@ use std::io::prelude::*;
 
 use serde_device_tree::ser::serializer::ValueType;
 
-const MAX_SIZE: usize = 256 + 32;
+const MAX_SIZE: usize = 1024;
 
 fn main() {
     #[derive(Serialize)]

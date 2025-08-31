@@ -97,7 +97,7 @@ struct DeviceTree {
 }
 
 impl DeviceTree {
-    pub fn tags(&self) -> Tags {
+    pub fn tags(&self) -> Tags<'_> {
         let structure_addr = (u32::from_be(self.header.off_dt_struct) - HEADER_LEN) as usize;
         let structure_len = u32::from_be(self.header.size_dt_struct) as usize;
         let strings_addr = (u32::from_be(self.header.off_dt_strings) - HEADER_LEN) as usize;

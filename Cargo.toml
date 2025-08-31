@@ -15,7 +15,7 @@ edition = "2024"
 
 [dependencies]
 serde = { version = "1.0", default-features = false, features = ["derive"] }
-dyn_serde = { version = "1.0.2", default-features = false, optional = true }
+dyn_serde = { version = "=1.1.2", default-features = false, optional = true }
 
 [features]
 default = ["std", "ser"]

@@ -56,7 +56,7 @@ impl<'se> Patch<'se> {
 
     #[inline(always)]
     pub fn get_depth_path(&self, x: usize) -> &'se str {
-        self.name.split('/').nth(x - 1).unwrap_or_default()
+        self.name.split('/').nth(x).unwrap_or_default()
     }
 
     // I hope to impl serde::ser::Serializer, but erase_serialize's return value is different from
@@ -66,7 +66,7 @@ impl<'se> Patch<'se> {
     pub fn serialize(&self, serializer: Serializer<'_, 'se>) {
         self.parsed.set(true);
         self.data
-            .serialize_dyn(&mut <dyn dyn_serde::Serializer>::new(serializer))
+            .dyn_serialize(&mut <dyn dyn_serde::Serializer>::new(serializer))
             .unwrap();
     }
 }

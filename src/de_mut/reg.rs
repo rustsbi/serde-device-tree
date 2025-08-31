@@ -58,7 +58,7 @@ impl<'de> Deserialize<'de> for Reg<'_> {
 }
 
 impl Reg<'_> {
-    pub fn iter(&self) -> RegIter {
+    pub fn iter(&self) -> RegIter<'_> {
         RegIter {
             data: self.0.cursor.data_on(self.0.dtb),
             config: self.0.reg,
