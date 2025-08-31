@@ -426,7 +426,7 @@ impl<'se> serde::ser::Serializer for Serializer<'_, 'se> {
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        todo!("unit");
+        Ok((ValueType::Prop, self.ser.dst.get_offset()))
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {

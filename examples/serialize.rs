@@ -17,13 +17,38 @@ fn main() {
     struct Base1 {
         pub hello: &'static str,
     }
+    #[derive(Serialize)]
+    struct ReversedMemory {
+        #[serde(rename = "#address-cells")]
+        pub address_cell: u32,
+        #[serde(rename = "#size-cells")]
+        pub size_cell: u32,
+        pub ranges: (),
+    }
+    #[derive(Serialize)]
+    struct ReversedMemoryItem {
+        pub reg: [u32; 4],
+    }
     let mut buf1 = [0u8; MAX_SIZE];
 
     {
-        let new_base = Base1 { hello: "added" };
-        let patch =
-            serde_device_tree::ser::patch::Patch::new("/base3", &new_base as _, ValueType::Node);
-        let list = [patch];
+        let new_base = ReversedMemory {
+            address_cell: 2,
+            size_cell: 2,
+            ranges: (),
+        };
+        let new_base_2 = ReversedMemoryItem { reg: [0, 1, 0, 20] };
+        let patch1 = serde_device_tree::ser::patch::Patch::new(
+            "/reversed-memory",
+            &new_base as _,
+            ValueType::Node,
+        );
+        let patch2 = serde_device_tree::ser::patch::Patch::new(
+            "/reversed-memory/mmode_resv1@0",
+            &new_base_2 as _,
+            ValueType::Node,
+        );
+        let list = [patch1, patch2];
         let base = Base {
             hello: 0xdeedbeef,
             base1: Base1 {
