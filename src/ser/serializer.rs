@@ -70,10 +70,32 @@ impl<'a, 'se> Serializer<'a, 'se> {
     }
 
     #[inline(always)]
+    pub fn get_origin(self) -> Serializer<'a, 'se> {
+        Serializer {
+            ser: self.ser,
+            current_dep: self.current_dep,
+            current_name: self.current_name,
+            prop_token_offset: 0,
+            overwrite_patch: None,
+        }
+    }
+
+    #[inline(always)]
     pub fn get_next_ref<'b>(&'b mut self) -> Serializer<'b, 'se> {
         Serializer {
             ser: self.ser,
             current_dep: self.current_dep + 1,
+            current_name: self.current_name,
+            prop_token_offset: 0,
+            overwrite_patch: None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn get_origin_ref<'b>(&'b mut self) -> Serializer<'b, 'se> {
+        Serializer {
+            ser: self.ser,
+            current_dep: self.current_dep,
             current_name: self.current_name,
             prop_token_offset: 0,
             overwrite_patch: None,
@@ -96,7 +118,7 @@ trait SerializeDynamicField<'se> {
 impl<'se> SerializeDynamicField<'se> for Serializer<'_, 'se> {
     fn start_node(&mut self) -> Result<(), Error> {
         self.ser.dst.step_by_u32(FDT_BEGIN_NODE);
-        if self.current_dep == 1 {
+        if self.current_dep == 0 {
             // The name of root node should be empty.
             self.ser.dst.step_by_u32(0);
         } else {
@@ -109,10 +131,11 @@ impl<'se> SerializeDynamicField<'se> for Serializer<'_, 'se> {
     fn end_node(&mut self) -> Result<(), Error> {
         for patch in self.ser.patch_list.add_list(self.current_dep) {
             let key = patch.get_depth_path(self.current_dep + 1);
-            self.serialize_dynamic_field(key, patch.data)?;
+            let mut ser = self.get_next_ref();
+            ser.serialize_dynamic_field(key, patch.data)?;
         }
         self.ser.dst.step_by_u32(FDT_END_NODE);
-        if self.current_dep == 1 {
+        if self.current_dep == 0 {
             self.ser.dst.step_by_u32(FDT_END);
         }
 
@@ -131,12 +154,12 @@ impl<'se> SerializeDynamicField<'se> for Serializer<'_, 'se> {
     {
         let value_type = match self.overwrite_patch {
             Some(data) => {
-                let ser = self.get_next_ref();
+                let ser = self.get_origin_ref();
                 data.serialize(ser);
                 data.patch_type
             }
             None => {
-                let ser = self.get_next_ref();
+                let ser = self.get_origin_ref();
                 value.serialize(ser)?.0
             }
         };
@@ -259,7 +282,7 @@ impl serde::ser::SerializeSeq for Serializer<'_, '_> {
     where
         T: ?Sized + serde::ser::Serialize,
     {
-        value.serialize(self.get_next_ref())?;
+        value.serialize(self.get_origin_ref())?;
         Ok(())
     }
 
@@ -277,7 +300,7 @@ impl serde::ser::SerializeTuple for Serializer<'_, '_> {
     where
         T: ?Sized + serde::ser::Serialize,
     {
-        value.serialize(self.get_next_ref())?;
+        value.serialize(self.get_origin_ref())?;
         Ok(())
     }
 
@@ -403,7 +426,7 @@ impl<'se> serde::ser::Serializer for Serializer<'_, 'se> {
     }
 
     fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
-        todo!("unit");
+        Ok((ValueType::Prop, self.ser.dst.get_offset()))
     }
 
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
@@ -475,7 +498,7 @@ impl<'se> serde::ser::Serializer for Serializer<'_, 'se> {
     }
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
-        let mut ser = self.get_next();
+        let mut ser = self.get_origin();
         ser.start_node()?;
         Ok(ser)
     }
@@ -485,7 +508,7 @@ impl<'se> serde::ser::Serializer for Serializer<'_, 'se> {
         _name: &'static str,
         _len: usize,
     ) -> Result<Self::SerializeStruct, Self::Error> {
-        let mut ser = self.get_next();
+        let mut ser = self.get_origin();
         ser.start_node()?;
         Ok(ser)
     }
