@@ -85,8 +85,6 @@ impl Iterator for RegIter<'_> {
     type Item = RegRegion;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("{:?}", self.config.address_cells);
-        println!("{:?}", self.config.size_cells);
         let len = BLOCK_LEN * (self.config.address_cells + self.config.size_cells);
         if self.data.len() >= len {
             let (current_block, data) = self.data.split_at(len);
