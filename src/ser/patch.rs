@@ -6,7 +6,7 @@ use core::cell::Cell;
 /// add on a dtb.
 pub struct Patch<'se> {
     name: &'se str,
-    pub data: &'se dyn dyn_serde::Serialize,
+    pub data: &'se dyn erased_serde::Serialize,
     pub patch_type: ValueType,
 
     /// This patch match how many item between its path and serializer.
@@ -30,7 +30,7 @@ impl<'se> Patch<'se> {
     #[inline(always)]
     pub fn new(
         name: &'se str,
-        data: &'se dyn dyn_serde::Serialize,
+        data: &'se dyn erased_serde::Serialize,
         patch_type: ValueType,
     ) -> Patch<'se> {
         Patch {
@@ -66,7 +66,7 @@ impl<'se> Patch<'se> {
     pub fn serialize(&self, serializer: Serializer<'_, 'se>) {
         self.parsed.set(true);
         self.data
-            .dyn_serialize(&mut <dyn dyn_serde::Serializer>::new(serializer))
+            .erased_serialize(&mut <dyn erased_serde::Serializer>::erase(serializer))
             .unwrap();
     }
 }
